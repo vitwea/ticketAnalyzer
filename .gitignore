@@ -1,0 +1,36 @@
+# --- Credentials ---
+credentials.json
+token.json
+.env
+*.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- DB ---
+*.db
+*.sqlite3
+
+# --- Logs ---
+logs/
+*.log
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Tests / coverage ---
+.pytest_cache/
+.coverage
+htmlcov/
