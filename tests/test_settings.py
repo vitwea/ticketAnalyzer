@@ -1,4 +1,5 @@
 import os
+import pytest
 from pathlib import Path
 
 from src.config.settings import Settings, load_settings, _require_env

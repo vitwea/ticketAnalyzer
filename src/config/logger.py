@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from logging.handlers import RotatingFileHandler
 
-from config.settings import settings
+from src.config.settings import settings
 
 _CONFIGURED = False
 
