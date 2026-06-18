@@ -1,43 +1,32 @@
 from __future__ import annotations
 
 import json
-import anthropic
+from google import genai
 from src.config.settings import settings
 from src.config.logger import get_logger
 
 logger = get_logger(__name__)
 
-client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+client = genai.Client(api_key=settings.anthropic_api_key)
+
 
 def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
     """
-    Extract structured ticket data from a PDF or image using Claude (Anthropic).
+    Extract structured ticket data from a PDF or image using Gemini 2.5 Flash.
     Returns a dict with supermarket, date, products, totals, etc.
     """
 
-    logger.info(f"Sending {mime_type} ({len(file_bytes)} bytes) to Claude OCR...")
+    logger.info(f"Sending {mime_type} ({len(file_bytes)} bytes) to Gemini 2.5 Flash OCR...")
 
-    import base64
-    file_b64 = base64.standard_b64encode(file_bytes).decode("utf-8")
-
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20241022",
-        max_tokens=2048,
-        messages=[
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
             {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": mime_type,
-                            "data": file_b64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": """
+                "mime_type": mime_type,
+                "data": file_bytes
+            },
+            {
+                "text": """
 Eres un sistema experto en lectura de tickets de supermercado.
 
 Tu tarea es analizar el texto del ticket y devolver un JSON ESTRICTO con esta estructura:
@@ -115,19 +104,17 @@ REGLAS IMPORTANTES:
 - Devuelve SIEMPRE un JSON válido, sin texto adicional.
 - No incluyas explicaciones.
 """
-                    }
-                ],
             }
-        ],
+        ]
     )
 
-    raw = response.content[0].text.strip()
+    raw = response.text.strip()
 
     try:
         data = json.loads(raw)
-        logger.info("Claude OCR extraction successful.")
+        logger.info("Gemini 2.5 Flash OCR extraction successful.")
         return data
     except Exception as e:
-        logger.error(f"Error parsing Claude JSON: {e}")
+        logger.error(f"Error parsing Gemini JSON: {e}")
         logger.error(f"Raw response: {raw}")
         raise
