@@ -11,7 +11,6 @@ from src.db.insert import (
     insert_ticket,
     insert_linea_ticket,
 )
-from src.db.connection import SessionLocal, engine
 
 
 @pytest.fixture(scope="function", autouse=True)
