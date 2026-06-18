@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, time
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -63,11 +64,11 @@ def test_insert_ticket():
 
     id_ticket = insert_ticket(
         id_supermercado=id_sup,
-        fecha="2024-01-01",
+        fecha=datetime(2024, 1, 1, 12, 30),
         id_mensaje_gmail="abc123",
         total=12.50,
         tienda="Carrefour Actur",
-        hora="12:30",
+        hora=time(12, 30),
     )
 
     assert isinstance(id_ticket, int)
@@ -75,11 +76,11 @@ def test_insert_ticket():
     # No dup
     id_ticket2 = insert_ticket(
         id_supermercado=id_sup,
-        fecha="2024-01-01",
+        fecha=datetime(2024, 1, 1, 12, 30),
         id_mensaje_gmail="abc123",
         total=12.50,
         tienda="Carrefour Actur",
-        hora="12:30",
+        hora=time(12, 30),
     )
 
     assert id_ticket == id_ticket2
@@ -92,11 +93,11 @@ def test_insert_linea_ticket():
 
     id_ticket = insert_ticket(
         id_supermercado=id_sup,
-        fecha="2024-01-01",
+        fecha=datetime(2024, 1, 1, 10, 0),
         id_mensaje_gmail="xyz789",
         total=3.20,
         tienda="Dia Centro",
-        hora="10:00",
+        hora=time(10, 0),
     )
 
     insert_linea_ticket(

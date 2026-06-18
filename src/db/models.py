@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Time
 from sqlalchemy.orm import relationship
 from src.db.connection import Base
+from datetime import datetime, timezone
 
 
 class Supermercado(Base):
@@ -17,11 +18,12 @@ class Ticket(Base):
 
     id = Column(Integer, primary_key=True)
     id_supermercado = Column(Integer, ForeignKey("supermercado.id"), nullable=False)
-    fecha = Column(String, nullable=False)
-    hora = Column(String, nullable=True)
+    fecha = Column(DateTime, nullable=False)
+    hora = Column(Time, nullable=True)
     tienda = Column(String, nullable=True)
     total = Column(Float, nullable=False)
     id_mensaje_gmail = Column(String, unique=True, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     supermercado = relationship("Supermercado", back_populates="tickets")
     lineas = relationship("LineaTicket", back_populates="ticket")
