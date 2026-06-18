@@ -8,8 +8,7 @@ to avoid hardcoded credentials, paths, or secrets inside the codebase.
 
 Usage:
     from config.settings import settings
-
-    print(settings.gmail_credentials_path)
+    print(settings.database_url)
 """
 
 from __future__ import annotations
@@ -27,16 +26,6 @@ load_dotenv()
 def _require_env(name: str, default: str | None = None) -> str:
     """
     Retrieve an environment variable or raise a clear error if it is missing.
-
-    Args:
-        name: Name of the environment variable.
-        default: Optional default value if the variable is not set.
-
-    Returns:
-        The value of the environment variable.
-
-    Raises:
-        RuntimeError: If the variable is required and not provided.
     """
     value = os.getenv(name, default)
     if value is None:
@@ -51,12 +40,10 @@ def _require_env(name: str, default: str | None = None) -> str:
 class Settings:
     """
     Container for all project configuration values.
-
-    This object is immutable (frozen=True) to ensure configuration
-    remains consistent throughout the application lifecycle.
+    Immutable (frozen=True) to ensure consistency.
     """
 
-    # Google OAuth / Gmail
+    # --- Google OAuth / Gmail ---
     google_client_id: str
     google_client_secret: str
     google_project_id: str
@@ -64,33 +51,61 @@ class Settings:
     gmail_token_path: Path
     gmail_scopes: tuple[str, ...]
 
-    # AI / LLMs
+    # --- AI / LLMs ---
     anthropic_api_key: str | None
 
-    # Database
-    database_url: str
+    # --- Database (PostgreSQL) ---
+    db_name: str
+    db_user: str
+    db_password: str
+    db_host: str
+    db_port: int
 
-    # Logging
+    # --- Logging ---
     log_level: str
     log_dir: Path
+
+    # --- Dynamic SQLAlchemy URL ---
+    @property
+    def database_url(self) -> str:
+        """
+        Build the SQLAlchemy database URL dynamically.
+        Falls back to SQLite if PostgreSQL variables are missing.
+        """
+        if self.db_name and self.db_user:
+            return (
+                f"postgresql+psycopg2://{self.db_user}:{self.db_password}"
+                f"@{self.db_host}:{self.db_port}/{self.db_name}"
+            )
+
+        # Fallback for tests or missing env vars
+        return "sqlite:///tickets.db"
 
 
 def load_settings() -> Settings:
     """
     Build the Settings object from environment variables.
-
-    Returns:
-        A fully populated Settings instance.
     """
     return Settings(
+        # Gmail OAuth
         google_client_id=_require_env("GOOGLE_CLIENT_ID"),
         google_client_secret=_require_env("GOOGLE_CLIENT_SECRET"),
         google_project_id=_require_env("GOOGLE_PROJECT_ID"),
         gmail_credentials_path=Path(os.getenv("GOOGLE_CREDENTIALS_PATH", "credentials.json")),
         gmail_token_path=Path(os.getenv("GOOGLE_TOKEN_PATH", "token.json")),
         gmail_scopes=("https://www.googleapis.com/auth/gmail.readonly",),
+
+        # AI
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
-        database_url=os.getenv("DATABASE_URL", "sqlite:///tickets.db"),
+
+        # PostgreSQL
+        db_name=os.getenv("DB_NAME", ""),
+        db_user=os.getenv("DB_USER", ""),
+        db_password=os.getenv("DB_PASSWORD", ""),
+        db_host=os.getenv("DB_HOST", "localhost"),
+        db_port=int(os.getenv("DB_PORT", 5432)),
+
+        # Logging
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         log_dir=Path(os.getenv("LOG_DIR", "logs")),
     )
