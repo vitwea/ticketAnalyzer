@@ -1,91 +1,97 @@
-from __future__ import annotations
-
-from sqlalchemy import select
+from src.db import connection
+from src.db.models import Supermercado, Categoria, Producto, Ticket, LineaTicket
 from sqlalchemy.exc import IntegrityError
-
-from src.db.connection import get_session
-from src.db.models import (
-    Supermercado,
-    Categoria,
-    Producto,
-    Ticket,
-    LineaTicket,
-)
-
-
-def get_or_create(session, model, defaults=None, **kwargs):
-    instance = session.execute(
-        select(model).filter_by(**kwargs)
-    ).scalar_one_or_none()
-
-    if instance:
-        return instance
-
-    params = {**kwargs, **(defaults or {})}
-    instance = model(**params)
-    session.add(instance)
-
-    try:
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        instance = session.execute(
-            select(model).filter_by(**kwargs)
-        ).scalar_one_or_none()
-
-    return instance
 
 
 def insert_supermercado(nombre: str) -> int:
-    with get_session() as session:
-        supermercado = get_or_create(session, Supermercado, nombre=nombre)
-        return supermercado.id_supermercado
+    db = connection.SessionLocal()
+    try:
+        sup = db.query(Supermercado).filter_by(nombre=nombre).first()
+        if sup:
+            return sup.id
+
+        sup = Supermercado(nombre=nombre)
+        db.add(sup)
+        db.commit()
+        return sup.id
+    finally:
+        db.close()
 
 
 def insert_categoria(nombre: str) -> int:
-    with get_session() as session:
-        categoria = get_or_create(session, Categoria, nombre=nombre)
-        return categoria.id_categoria
+    db = connection.SessionLocal()
+    try:
+        cat = db.query(Categoria).filter_by(nombre=nombre).first()
+        if cat:
+            return cat.id
+
+        cat = Categoria(nombre=nombre)
+        db.add(cat)
+        db.commit()
+        return cat.id
+    finally:
+        db.close()
 
 
-def insert_producto(nombre, id_categoria, tipo_precio) -> int:
-    with get_session() as session:
-        producto = get_or_create(
-            session,
-            Producto,
+def insert_producto(nombre: str, id_categoria: int, unidad_medida: str) -> int:
+    db = connection.SessionLocal()
+    try:
+        prod = (
+            db.query(Producto)
+            .filter_by(nombre=nombre, id_categoria=id_categoria, unidad_medida=unidad_medida)
+            .first()
+        )
+        if prod:
+            return prod.id
+
+        prod = Producto(
             nombre=nombre,
             id_categoria=id_categoria,
-            tipo_precio=tipo_precio,
+            unidad_medida=unidad_medida,
         )
-        return producto.id_producto
+        db.add(prod)
+        db.commit()
+        return prod.id
+    finally:
+        db.close()
 
 
-def insert_ticket(id_supermercado, fecha, id_mensaje_gmail, total, tienda, hora):
-    with get_session() as session:
-        ticket = get_or_create(
-            session,
-            Ticket,
+def insert_ticket(id_supermercado: int, fecha: str, id_mensaje_gmail: str,
+                  total: float, tienda: str, hora: str) -> int:
+    db = connection.SessionLocal()
+    try:
+        ticket = db.query(Ticket).filter_by(id_mensaje_gmail=id_mensaje_gmail).first()
+        if ticket:
+            return ticket.id
+
+        ticket = Ticket(
             id_supermercado=id_supermercado,
             fecha=fecha,
-            id_mensaje_gmail=id_mensaje_gmail,
-            total=total,
-            tienda=tienda,
             hora=hora,
+            tienda=tienda,
+            total=total,
+            id_mensaje_gmail=id_mensaje_gmail,
         )
-        return ticket.id_ticket
+        db.add(ticket)
+        db.commit()
+        return ticket.id
+    finally:
+        db.close()
 
 
 def insert_linea_ticket(
-    id_ticket,
-    id_producto,
-    cantidad,
-    unidad_medida,
-    precio_unitario,
-    precio_total,
-    oferta,
-    descuento,
-):
-    with get_session() as session:
+    id_ticket: int,
+    id_producto: int,
+    cantidad: float,
+    unidad_medida: str,
+    precio_unitario: float,
+    precio_total: float,
+    oferta: bool,
+    descuento: float,
+    tipo_precio: str = "unidad",
+) -> int:
+    db = connection.SessionLocal()
+    try:
         linea = LineaTicket(
             id_ticket=id_ticket,
             id_producto=id_producto,
@@ -95,6 +101,10 @@ def insert_linea_ticket(
             precio_total=precio_total,
             oferta=oferta,
             descuento=descuento,
+            tipo_precio=tipo_precio,
         )
-        session.add(linea)
-        session.commit()
+        db.add(linea)
+        db.commit()
+        return linea.id
+    finally:
+        db.close()
