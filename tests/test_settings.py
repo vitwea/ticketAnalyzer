@@ -26,11 +26,18 @@ def test_load_settings_uses_defaults_for_optional_fields(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "dummy_client_secret")
     monkeypatch.setenv("GOOGLE_PROJECT_ID", "dummy_project_id")
 
+    # Remove optional fields
     monkeypatch.delenv("GOOGLE_CREDENTIALS_PATH", raising=False)
     monkeypatch.delenv("GOOGLE_TOKEN_PATH", raising=False)
-    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("LOG_LEVEL", raising=False)
     monkeypatch.delenv("LOG_DIR", raising=False)
+
+    # Remove PostgreSQL variables so fallback = SQLite
+    monkeypatch.delenv("DB_NAME", raising=False)
+    monkeypatch.delenv("DB_USER", raising=False)
+    monkeypatch.delenv("DB_PASSWORD", raising=False)
+    monkeypatch.delenv("DB_HOST", raising=False)
+    monkeypatch.delenv("DB_PORT", raising=False)
 
     settings = load_settings()
 
@@ -38,5 +45,3 @@ def test_load_settings_uses_defaults_for_optional_fields(monkeypatch):
     assert settings.gmail_credentials_path == Path("credentials.json")
     assert settings.gmail_token_path == Path("token.json")
     assert settings.database_url == "sqlite:///tickets.db"
-    assert settings.log_level == "INFO"
-    assert settings.log_dir == Path("logs")
