@@ -28,9 +28,9 @@ def test_extract_ticket_data():
     }
 
     fake_response = MagicMock()
-    fake_response.content = [MagicMock(text=json.dumps(fake_json))]
+    fake_response.text = json.dumps(fake_json)
 
-    with patch("src.ocr.unified.client.messages.create") as mock_gen:
+    with patch("src.ocr.unified.client.models.generate_content") as mock_gen:
         mock_gen.return_value = fake_response
 
         result = extract_ticket_data(b"fake_bytes", "application/pdf")
@@ -39,3 +39,5 @@ def test_extract_ticket_data():
         assert result["total"] == 0.95
         assert len(result["productos"]) == 1
         assert result["productos"][0]["nombre"] == "Leche Entera"
+
+
