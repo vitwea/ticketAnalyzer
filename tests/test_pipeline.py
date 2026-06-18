@@ -1,8 +1,46 @@
+from datetime import datetime, time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.etl.pipeline import run_pipeline
+from src.etl.pipeline import run_pipeline, _validate_ticket_json
 from src.db.connection import Base
+
+
+def test_validate_ticket_json():
+    """Test that ticket JSON validation catches missing fields."""
+    valid_ticket = {
+        "supermercado": "Mercadona",
+        "fecha": "2024-06-12",
+        "hora": "12:33",
+        "tienda": "Zaragoza",
+        "total": 23.45,
+        "productos": [
+            {
+                "nombre": "Pan",
+                "categoria": "Panadería",
+                "cantidad": 1,
+                "unidad_medida": "unidad",
+                "precio_unitario": 1.0,
+                "precio_total": 1.0,
+                "tipo_precio": "unidad",
+                "oferta": False,
+                "descuento": 0.0,
+            }
+        ]
+    }
+    
+    # Should not raise
+    _validate_ticket_json(valid_ticket)
+
+    # Test missing required field
+    invalid = {**valid_ticket}
+    del invalid["supermercado"]
+    
+    try:
+        _validate_ticket_json(invalid)
+        assert False, "Should have raised ValueError"
+    except ValueError as e:
+        assert "supermercado" in str(e)
 
 
 def test_pipeline(monkeypatch):
@@ -12,7 +50,7 @@ def test_pipeline(monkeypatch):
     # Fake attachment (PDF bytes)
     fake_attachment = [("ticket.pdf", "application/pdf", b"fake")]
 
-    # Fake OCR result (formato completo actualizado)
+    # Fake OCR result (formato completo actualizado con todos los campos)
     fake_ticket_json = {
         "supermercado": "Mercadona",
         "fecha": "2024-06-12",
@@ -60,3 +98,4 @@ def test_pipeline(monkeypatch):
     # Assertions
     assert len(inserted) == 1
     assert isinstance(inserted[0], int)
+

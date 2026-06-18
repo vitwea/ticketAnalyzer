@@ -1,10 +1,12 @@
-python-dotenv
-google-auth
-google-auth-oauthlib
-google-api-python-client
-anthropic
+# Core dependencies
+python-dotenv==1.0.0
+google-auth==2.28.0
+google-auth-oauthlib==1.2.0
+google-api-python-client==1.12.5
+anthropic==0.25.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
 
 # Tests
-pytest
-python-dotenv
-
+pytest==7.4.3
+pytest-cov==4.1.0

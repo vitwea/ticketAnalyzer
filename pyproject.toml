@@ -1,3 +1,51 @@
+[build-system]
+requires = ["setuptools>=65.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ticket-analyzer"
+version = "0.1.0"
+description = "Extract ticket data from supermarket receipts via Gmail using OCR"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Development Team" }
+]
+keywords = ["ocr", "tickets", "gmail", "etl"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "python-dotenv==1.0.0",
+    "google-auth==2.28.0",
+    "google-auth-oauthlib==1.2.0",
+    "google-api-python-client==1.12.5",
+    "anthropic==0.25.0",
+    "sqlalchemy==2.0.23",
+    "psycopg2-binary==2.9.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.3",
+    "pytest-cov==4.1.0",
+    "black==23.12.0",
+    "ruff==0.1.8",
+]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I001"]
+ignore = ["E501"]
