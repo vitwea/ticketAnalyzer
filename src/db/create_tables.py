@@ -1,13 +1,7 @@
-"""
-Utility script to create all database tables using SQLAlchemy ORM.
-
-Run:
-    python -m db.create_tables
-"""
-
 from __future__ import annotations
 
 from src.db.connection import Base, engine
+from src.db import models
 from src.config.logger import get_logger
 from src.db.init_db import ensure_database_exists
 

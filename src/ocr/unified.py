@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from google import genai
+from google.genai import types
 from src.config.settings import settings
 from src.config.logger import get_logger
 
@@ -21,12 +22,8 @@ def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=[
-            {
-                "mime_type": mime_type,
-                "data": file_bytes
-            },
-            {
-                "text": """
+            types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
+            types.Part.from_text(text="""
 Eres un sistema experto en lectura de tickets de supermercado.
 
 Tu tarea es analizar el texto del ticket y devolver un JSON ESTRICTO con esta estructura:
@@ -103,12 +100,18 @@ REGLAS IMPORTANTES:
 6) JSON:
 - Devuelve SIEMPRE un JSON válido, sin texto adicional.
 - No incluyas explicaciones.
-"""
-            }
+"""),
         ]
     )
 
     raw = response.text.strip()
+
+    # Limpiar markdown por si Gemini devuelve ```json ... ```
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
 
     try:
         data = json.loads(raw)
