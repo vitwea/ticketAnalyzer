@@ -7,6 +7,7 @@ from src.gmail.reader import list_messages, get_attachments_bytes
 from src.ocr.unified import extract_ticket_data
 from src.db.insert import (
     insert_supermercado,
+    insert_tienda,
     insert_ticket,
     insert_producto,
     insert_categoria,
@@ -66,6 +67,41 @@ def _parse_hora(hora_str: str | None) -> time | None:
             return None
 
 
+def _parse_tienda(tienda_str: str | None) -> tuple[str, str, str] | None:
+    """
+    Parse tienda string from OCR in format: "C/Tenor Gayarre, 4 (50010, Zaragoza)"
+    Returns (direccion, codigo_postal, ciudad) or None if parsing fails.
+    """
+    if not tienda_str:
+        return None
+
+    try:
+        # Extract content within parentheses
+        if "(" not in tienda_str or ")" not in tienda_str:
+            logger.warning(f"Tienda string does not match expected format: {tienda_str}")
+            return None
+
+        open_paren = tienda_str.rfind("(")
+        close_paren = tienda_str.rfind(")")
+
+        direccion = tienda_str[:open_paren].strip()
+        paren_content = tienda_str[open_paren+1:close_paren].strip()
+
+        # Parse (codigo_postal, ciudad)
+        if "," not in paren_content:
+            logger.warning(f"Could not parse postal code and city: {paren_content}")
+            return None
+
+        parts = paren_content.split(",", 1)
+        codigo_postal = parts[0].strip()
+        ciudad = parts[1].strip()
+
+        return (direccion, codigo_postal, ciudad)
+    except Exception as e:
+        logger.warning(f"Error parsing tienda string '{tienda_str}': {e}")
+        return None
+
+
 def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
     """
     Process extracted ticket JSON and insert into database.
@@ -76,18 +112,26 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
     supermercado = ticket_json["supermercado"]
     fecha = _parse_fecha(ticket_json["fecha"])
     hora = _parse_hora(ticket_json.get("hora"))
-    tienda = ticket_json.get("tienda")
+    tienda_str = ticket_json.get("tienda")
     total = float(ticket_json["total"])
     productos = ticket_json["productos"]
 
     id_sup = insert_supermercado(supermercado)
+
+    # Parse and insert tienda if available
+    tienda_id = None
+    if tienda_str:
+        parsed_tienda = _parse_tienda(tienda_str)
+        if parsed_tienda:
+            direccion, codigo_postal, ciudad = parsed_tienda
+            tienda_id = insert_tienda(id_sup, direccion, codigo_postal, ciudad)
 
     id_ticket = insert_ticket(
         id_supermercado=id_sup,
         fecha=fecha,
         id_mensaje_gmail=gmail_msg_id,
         total=total,
-        tienda=tienda,
+        tienda_id=tienda_id,
         hora=hora,
     )
 

@@ -10,7 +10,21 @@ class Supermercado(Base):
     id = Column(Integer, primary_key=True)
     nombre = Column(String, unique=True, nullable=False)
 
+    tiendas = relationship("Tienda", back_populates="supermercado")
     tickets = relationship("Ticket", back_populates="supermercado")
+
+
+class Tienda(Base):
+    __tablename__ = "tienda"
+
+    id = Column(Integer, primary_key=True)
+    supermercado_id = Column(Integer, ForeignKey("supermercado.id"), nullable=False)
+    direccion = Column(String, nullable=False)
+    codigo_postal = Column(String, nullable=False)
+    ciudad = Column(String, nullable=False)
+
+    supermercado = relationship("Supermercado", back_populates="tiendas")
+    tickets = relationship("Ticket", back_populates="tienda")
 
 
 class Ticket(Base):
@@ -18,14 +32,15 @@ class Ticket(Base):
 
     id = Column(Integer, primary_key=True)
     id_supermercado = Column(Integer, ForeignKey("supermercado.id"), nullable=False)
+    tienda_id = Column(Integer, ForeignKey("tienda.id"), nullable=True)
     fecha = Column(DateTime, nullable=False)
     hora = Column(Time, nullable=True)
-    tienda = Column(String, nullable=True)
     total = Column(Float, nullable=False)
     id_mensaje_gmail = Column(String, unique=True, nullable=False)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     supermercado = relationship("Supermercado", back_populates="tickets")
+    tienda = relationship("Tienda", back_populates="tickets")
     lineas = relationship("LineaTicket", back_populates="ticket")
 
 

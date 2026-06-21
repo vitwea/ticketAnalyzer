@@ -1,6 +1,6 @@
 from sqlalchemy.exc import IntegrityError
 from src.db import connection
-from src.db.models import Supermercado, Categoria, Producto, Ticket, LineaTicket
+from src.db.models import Supermercado, Categoria, Producto, Ticket, LineaTicket, Tienda
 from src.config.logger import get_logger
 
 logger = get_logger(__name__)
@@ -33,6 +33,39 @@ def insert_supermercado(nombre: str) -> int:
     except Exception as e:
         db.rollback()
         logger.error(f"Error inserting supermercado {nombre}: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def insert_tienda(supermercado_id: int, direccion: str, codigo_postal: str, ciudad: str) -> int:
+    """
+    Insert or retrieve a store location.
+    Uses upsert logic to avoid duplicates (unique by supermercado + direccion + codigo_postal).
+    """
+    db = connection.SessionLocal()
+    try:
+        tienda = (
+            db.query(Tienda)
+            .filter_by(supermercado_id=supermercado_id, direccion=direccion, codigo_postal=codigo_postal)
+            .first()
+        )
+        if tienda:
+            return tienda.id
+
+        tienda = Tienda(
+            supermercado_id=supermercado_id,
+            direccion=direccion,
+            codigo_postal=codigo_postal,
+            ciudad=ciudad,
+        )
+        db.add(tienda)
+        db.commit()
+        logger.debug(f"Inserted new tienda: {direccion} (id={tienda.id})")
+        return tienda.id
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inserting tienda {direccion}: {e}")
         raise
     finally:
         db.close()
@@ -103,7 +136,7 @@ def insert_producto(nombre: str, id_categoria: int, unidad_medida: str) -> int:
 
 
 def insert_ticket(id_supermercado: int, fecha, id_mensaje_gmail: str,
-                  total: float, tienda: str = None, hora = None) -> int:
+                  total: float, tienda_id: int = None, hora = None) -> int:
     """
     Insert or retrieve a ticket by Gmail message ID.
     Uses upsert logic to prevent duplicate processing.
@@ -119,7 +152,7 @@ def insert_ticket(id_supermercado: int, fecha, id_mensaje_gmail: str,
             id_supermercado=id_supermercado,
             fecha=fecha,
             hora=hora,
-            tienda=tienda,
+            tienda_id=tienda_id,
             total=total,
             id_mensaje_gmail=id_mensaje_gmail,
         )
