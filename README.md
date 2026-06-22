@@ -99,7 +99,7 @@ The system does **more than just store the receipt**: it normalizes product name
 ## 🗃️ Data Model
 
 <div align="center">
-  <img src="docs/ER%20diagram.png" alt="ER Diagram" width="850">
+  <img src="docs/ERdiagram.png" alt="ER Diagram" width="850">
 </div>
 
 <details>
