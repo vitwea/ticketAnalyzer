@@ -98,84 +98,9 @@ The system does **more than just store the receipt**: it normalizes product name
 
 ## 🗃️ Data Model
 
-```mermaid
-erDiagram
-    SUPERMARKET ||--o{ STORE : "has"
-    SUPERMARKET ||--o{ PRICE_HISTORY : "has"
-    STORE ||--o{ RECEIPT : "issues"
-    SOURCE ||--o{ RECEIPT : "originates"
-    RECEIPT ||--o{ RECEIPT_LINE : "contains"
-    PRODUCT ||--o{ RECEIPT_LINE : "appears in"
-    PRODUCT ||--o{ PRODUCT_ALIAS : "has"
-    PRODUCT ||--o{ PRICE_HISTORY : "has"
-    CATEGORY ||--o{ PRODUCT : "classifies"
-    CATEGORY ||--o{ CATEGORY : "subcategory of"
-    BRAND ||--o{ PRODUCT : "manufactures"
-
-    SUPERMARKET {
-        int id_supermarket PK
-        string name
-    }
-    STORE {
-        int id_store PK
-        int id_supermarket FK
-        string address
-        string postal_code
-        string city
-        string province
-        string country
-    }
-    SOURCE {
-        int id_source PK
-        string name
-    }
-    RECEIPT {
-        int id_receipt PK
-        string gmail_id
-        datetime datetime
-        numeric total_amount
-        int id_store FK
-        int id_source FK
-    }
-    RECEIPT_LINE {
-        int id_line PK
-        int id_receipt FK
-        int id_product FK
-        numeric quantity
-        string unit
-        numeric original_unit_price
-        numeric discount
-        numeric final_unit_price
-        numeric line_total
-    }
-    PRODUCT {
-        int id_product PK
-        string normalized_name
-        int id_category FK
-        int id_brand FK
-    }
-    PRODUCT_ALIAS {
-        int id_alias PK
-        string original_name
-        int id_product FK
-    }
-    CATEGORY {
-        int id_category PK
-        string name
-        int parent_category_id FK
-    }
-    BRAND {
-        int id_brand PK
-        string name
-    }
-    PRICE_HISTORY {
-        int id_history PK
-        int id_product FK
-        int id_supermarket FK
-        date date
-        numeric price
-    }
-```
+<div align="center">
+  <img src="docs/ER%20diagram.png" alt="ER Diagram" width="850">
+</div>
 
 <details>
 <summary>📋 Table descriptions</summary>
@@ -362,6 +287,6 @@ Internal / proprietary use.
 
 <div align="center">
 
-Built with ☕ and a lot of care for parsing Mercadona receipts
+Built with ☕(cold brew, bc it's too damn hot) and a lot of care 
 
 </div>
