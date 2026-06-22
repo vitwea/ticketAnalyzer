@@ -362,6 +362,6 @@ Internal / proprietary use.
 
 <div align="center">
 
-Built with ☕ (cold brew) and a lot of care
+Built with ☕ and a lot of care for parsing Mercadona receipts
 
 </div>
