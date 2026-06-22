@@ -1,137 +1,217 @@
-# Ticket Analyzer
+<div align="center">
 
-Extract and analyze supermarket ticket data from Gmail attachments using OCR and LLMs.
+# 🧾 Ticket Analyzer
 
-## Overview
+**Turn the supermarket receipts that land in your Gmail into clean, structured data.**
 
-This project automates the extraction of structured data from supermarket receipts (tickets) that arrive via Gmail. It uses:
+AI-powered OCR · Product & brand normalization · Price history · SQLAlchemy ORM
 
-- **Gmail API** to retrieve messages and attachments
-- **Claude (Anthropic)** for OCR and data extraction
-- **SQLAlchemy ORM** with PostgreSQL/SQLite for persistent storage
-- **Python ETL pipeline** for orchestration
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0-red?logo=sqlite&logoColor=white)](https://www.sqlalchemy.org/)
+[![Gmail API](https://img.shields.io/badge/Gmail-API-EA4335?logo=gmail&logoColor=white)](https://developers.google.com/gmail/api)
+[![Tests](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)](https://docs.pytest.org/)
+[![License](https://img.shields.io/badge/license-Proprietary-lightgrey)](#-license)
 
-## Architecture
+</div>
+
+---
+
+## 📑 Table of Contents
+
+- [Overview](#-overview)
+- [Features](#-features)
+- [Pipeline Architecture](#-pipeline-architecture)
+- [Data Model](#-data-model)
+- [Tech Stack](#-tech-stack)
+- [Installation](#-installation)
+- [Configuration](#-configuration-env)
+- [Usage](#-usage)
+- [Tests](#-tests)
+- [Project Structure](#-project-structure)
+- [Roadmap](#-roadmap)
+- [Troubleshooting](#-troubleshooting)
+- [License](#-license)
+
+---
+
+## 🔍 Overview
+
+**Ticket Analyzer** automates the full lifecycle of a supermarket receipt: from the moment it lands as an email attachment, to the moment its products, prices, and brands are stored in a relational database ready for analysis.
 
 ```
-Gmail Messages
-    ↓
-[OCR Module] → Claude API (extract JSON)
-    ↓
-[Validation] → Ensure required fields
-    ↓
-[Insert Layer] → SQLAlchemy ORM
-    ↓
-PostgreSQL/SQLite Database
+📧 Email with a receipt attached
+        │
+        ▼
+🤖 AI-powered OCR (Gemini 2.5 Flash) → extracts supermarket, store, products, prices and brands
+        │
+        ▼
+✅ Validation → checks that no required fields are missing
+        │
+        ▼
+🗄️ ORM Insert Layer → normalizes products, brands and categories, prevents duplicates
+        │
+        ▼
+🐘 PostgreSQL / SQLite
 ```
 
-## Installation
+The system does **more than just store the receipt**: it normalizes product names, separates the brand (manufacturer or store brand) from the name, links each product to a fixed category, and keeps a price history per supermarket — all ready to power spending analytics and price comparisons.
+
+---
+
+## ✨ Features
+
+| | |
+|---|---|
+| 🧠 **Robust AI-powered OCR** | Gemini 2.5 Flash reads receipts with complex layouts, abbreviations, and truncated names |
+| 🏷️ **Brand recognition** | Detects manufacturer brands and, when none is visible, infers the supermarket's own private label (Mercadona → Hacendado, Alcampo → Auchan...) |
+| 🧩 **Product normalization** | Completes truncated/abbreviated names and separates brand, category, and alias from the original name |
+| 📍 **Structured addresses** | Extracts address, postal code, and city for every physical store |
+| 📊 **Price history** | Lets you track price evolution per product and supermarket |
+| 🔁 **Idempotency** | The `gmail_id` prevents the same receipt from being processed twice |
+| 🛡️ **Strict validation** | Rejects receipts with missing required fields before touching the database |
+| ↩️ **Safe transactions** | Automatic rollback on any insertion error |
+| 🪵 **Comprehensive logging** | Console + rotating file (`logs/app.log`), configurable level |
+| 🐘 **PostgreSQL or SQLite** | Production-ready with PostgreSQL, zero-config development/testing with SQLite |
+
+---
+
+## 🏗️ Pipeline Architecture
+
+```
+┌──────────────┐     ┌────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│ Gmail API    │────▶│ OCR (Gemini)   │────▶│ JSON Validation  │────▶│ Insert Layer ORM │
+│ src/gmail/   │     │ src/ocr/       │     │ src/etl/pipeline │     │ src/db/insert.py │
+└──────────────┘     └────────────────┘     └──────────────────┘     └────────┬────────┘
+                                                                               │
+                                                                               ▼
+                                                                     ┌───────────────────┐
+                                                                     │ PostgreSQL / SQLite│
+                                                                     └───────────────────┘
+```
+
+1. **`src/gmail`** — authenticates via OAuth2, searches messages by query (`from:mercadona`), and downloads attachments in memory.
+2. **`src/ocr`** — sends the attachment (PDF/image) to Gemini 2.5 Flash with a prompt specialized in Spanish supermarket receipts.
+3. **`src/etl/pipeline.py`** — validates the returned JSON, parses dates/addresses, and orchestrates the insertion.
+4. **`src/db`** — ORM layer (SQLAlchemy) with idempotent *get-or-create* functions for every entity.
+
+---
+
+## 🗃️ Data Model
+
+<div align="center">
+  <img src="docs/er%20diagram.png" alt="ER Diagram" width="850">
+</div>
+
+<details>
+<summary>📋 Table descriptions</summary>
+
+| Table | Purpose |
+|---|---|
+| **Supermarket** | Supermarket chain (Mercadona, Carrefour, Dia...) |
+| **Store** | A specific physical store: address, postal code, city, province, and country |
+| **Source** | Origin of the receipt (Email, WhatsApp, manual entry...) |
+| **Receipt** | A specific receipt, linked to its Gmail message (`gmail_id` is unique → idempotency) |
+| **ReceiptLine** | Each product line within a receipt: quantity, price before/after discount, total |
+| **Product** | Normalized product (clean name, category, and brand) |
+| **ProductAlias** | Names "as-is" exactly as they appear on receipts (`original_name`), mapped to the normalized product |
+| **Category** | Product category, with optional hierarchy (parent/child category) |
+| **Brand** | Product brand: manufacturer (Coca-Cola, Colgate...) or supermarket private label (Hacendado, Auchan...) |
+| **PriceHistory** | Price evolution of a product at a given supermarket over time |
+
+</details>
+
+---
+
+## 🛠️ Tech Stack
+
+| Category | Technology |
+|---|---|
+| Language | Python 3.10+ |
+| OCR / AI | Gemini 2.5 Flash (`google-genai`) |
+| Email | Gmail API + OAuth2 (`google-api-python-client`) |
+| ORM | SQLAlchemy 2.0 |
+| Database | PostgreSQL (production) / SQLite (development & tests) |
+| Tests | pytest + pytest-cov |
+| Code quality | black, ruff |
+
+---
+
+## 📦 Installation
 
 ### Prerequisites
 
 - Python 3.10+
-- PostgreSQL (optional, SQLite fallback)
-- Google OAuth credentials for Gmail API
-- Anthropic API key
+- PostgreSQL (optional — automatic SQLite fallback)
+- Gmail API OAuth credentials
+- Google AI (Gemini) API key
 
-### Setup
+### Steps
 
-1. **Clone and install dependencies:**
+**1. Clone the repo and install dependencies**
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Configure environment variables:**
+**2. Set up environment variables**
 
-Create a `.env` file in the project root (copy from `.env.example` if provided):
+Copy `.env.example` to `.env` and fill in your values:
 
-```env
-# Gmail OAuth
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_SECRET=your_client_secret
-GOOGLE_PROJECT_ID=your_project_id
-GOOGLE_CREDENTIALS_PATH=credentials.json
-GOOGLE_TOKEN_PATH=token.json
-
-# AI
-ANTHROPIC_API_KEY=your_anthropic_key
-
-# Database (PostgreSQL) - optional, defaults to SQLite
-DB_NAME=ticket_analyzer
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
-
-# Logging
-LOG_LEVEL=INFO
-LOG_DIR=logs
+```bash
+cp .env.example .env
 ```
 
-3. **Initialize the database:**
+**3. Initialize the database**
 
 ```bash
 python -m src.db.create_tables
 ```
 
-## Usage
+You're all set! 🎉
 
-### Run the ETL Pipeline
+---
+
+## ⚙️ Configuration (`.env`)
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | ✅ | — | OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | ✅ | — | OAuth client secret |
+| `GOOGLE_PROJECT_ID` | ✅ | — | Google Cloud project ID |
+| `GOOGLE_CREDENTIALS_PATH` | ❌ | `credentials.json` | Path to the credentials file |
+| `GOOGLE_TOKEN_PATH` | ❌ | `token.json` | Path where the OAuth token is saved |
+| `ANTHROPIC_API_KEY` | ✅ | — | API key for the AI model |
+| `DB_NAME` | ❌ | — | PostgreSQL database name (empty → SQLite) |
+| `DB_USER` | ❌ | — | Database user |
+| `DB_PASSWORD` | ❌ | — | Database password |
+| `DB_HOST` | ❌ | `localhost` | Database host |
+| `DB_PORT` | ❌ | `5432` | Database port |
+| `LOG_LEVEL` | ❌ | `INFO` | `DEBUG` \| `INFO` \| `WARNING` \| `ERROR` |
+| `LOG_DIR` | ❌ | `logs` | Logs directory |
+
+---
+
+## 🚀 Usage
+
+### From Python
 
 ```python
 from src.etl.pipeline import run_pipeline
 
-# Extract all tickets from Mercadona
+# Extract all pending Mercadona receipts from Gmail
 ticket_ids = run_pipeline("from:mercadona")
-print(f"Inserted {len(ticket_ids)} tickets")
+print(f"Inserted {len(ticket_ids)} receipts")
 ```
 
-Or from command line:
+### From the command line
 
 ```bash
 python -m src.etl.pipeline
 ```
 
-### Database Schema
+---
 
-**Supermercado** (Supermarket)
-- `id` (PK)
-- `nombre` (name, unique)
-
-**Ticket** (Receipt)
-- `id` (PK)
-- `id_supermercado` (FK)
-- `fecha` (date, DateTime)
-- `hora` (time, Time)
-- `tienda` (store name)
-- `total` (amount)
-- `id_mensaje_gmail` (Gmail message ID, unique)
-- `created_at` (insertion timestamp)
-
-**Categoria** (Category)
-- `id` (PK)
-- `nombre` (name, unique)
-
-**Producto** (Product)
-- `id` (PK)
-- `nombre` (name)
-- `id_categoria` (FK)
-- `unidad_medida` (unit)
-
-**LineaTicket** (Line Item)
-- `id` (PK)
-- `id_ticket` (FK)
-- `id_producto` (FK)
-- `cantidad` (quantity)
-- `unidad_medida` (unit)
-- `precio_unitario` (unit price)
-- `precio_total` (total price)
-- `tipo_precio` ("unidad" | "peso")
-- `oferta` (is offer)
-- `descuento` (discount %)
-
-## Running Tests
+## 🧪 Tests
 
 ```bash
 pytest tests/ -v
@@ -143,76 +223,70 @@ With coverage:
 pytest tests/ --cov=src --cov-report=html
 ```
 
-## Logging
+---
 
-Logs are written to both console and rotating file (`logs/app.log`).
-
-Configure log level via `LOG_LEVEL` env var:
-- `DEBUG`: Very detailed output
-- `INFO`: Standard operational logs
-- `WARNING`: Warnings and errors only
-- `ERROR`: Errors only
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 .
 ├── src/
-│   ├── config/          # Settings, logging
-│   ├── db/              # Models, insert functions, connection
-│   ├── etl/             # Pipeline orchestration
-│   ├── gmail/           # Gmail API integration
-│   └── ocr/             # OCR extraction using Claude
-├── tests/               # Unit tests
-├── requirements.txt     # Pinned dependencies
-├── pyproject.toml       # Project metadata and pytest config
+│   ├── config/          # Centralized settings and logging
+│   ├── db/               # ORM models, insert layer, and connection
+│   ├── etl/              # Pipeline orchestration (validation + insertion)
+│   ├── gmail/             # Gmail authentication and reading
+│   └── ocr/               # AI-powered receipt data extraction
+├── tests/                # Unit test suite
+├── requirements.txt      # Pinned dependencies
+├── pyproject.toml        # Project metadata and pytest config
 └── README.md
 ```
 
-## Key Features
+---
 
-✅ **Robust OCR** - Claude handles complex ticket layouts
-✅ **Data Validation** - Validates all required fields before insertion
-✅ **Transaction Management** - Proper rollback on errors
-✅ **Type Safety** - DateTime/Time columns instead of strings
-✅ **Connection Pooling** - Optimized for PostgreSQL and SQLite
-✅ **Comprehensive Logging** - Debug and audit trails
-✅ **Duplicate Prevention** - Prevents re-processing via Gmail message ID
-✅ **Error Recovery** - Skips bad attachments, continues pipeline
+## 🗺️ Roadmap
 
-## Environment Variable Reference
+- [ ] Extract store province/country (currently defaulted)
+- [ ] Spending analytics dashboard by category/brand
+- [ ] Multi-language support for receipts outside Spain
+- [ ] Automatic detection of offers like "2x1" / "3x2"
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GOOGLE_CLIENT_ID` | Yes | - | OAuth client ID |
-| `GOOGLE_CLIENT_SECRET` | Yes | - | OAuth client secret |
-| `GOOGLE_PROJECT_ID` | Yes | - | Google Cloud project ID |
-| `GOOGLE_CREDENTIALS_PATH` | No | `credentials.json` | Path to credentials file |
-| `GOOGLE_TOKEN_PATH` | No | `token.json` | Path to save OAuth token |
-| `ANTHROPIC_API_KEY` | Yes | - | Anthropic API key |
-| `DB_NAME` | No | - | PostgreSQL database name (SQLite if empty) |
-| `DB_USER` | No | - | Database user |
-| `DB_PASSWORD` | No | - | Database password |
-| `DB_HOST` | No | `localhost` | Database host |
-| `DB_PORT` | No | `5432` | Database port |
-| `LOG_LEVEL` | No | `INFO` | Logging level |
-| `LOG_DIR` | No | `logs` | Log directory |
+---
 
-## Troubleshooting
+## 🆘 Troubleshooting
 
-### "Missing required environment variable"
-Check `.env` file is created and contains all required keys.
+<details>
+<summary><strong>"Missing required environment variable"</strong></summary>
 
-### OCR returning incomplete data
-Review Claude's response in logs. May indicate image quality issues.
+Check that the `.env` file exists and contains all required keys.
+</details>
 
-### Database connection errors
-- For PostgreSQL: Verify credentials and database exists
-- For SQLite: Check file permissions on `tickets.db`
+<details>
+<summary><strong>OCR returns incomplete data</strong></summary>
 
-### Duplicate ticket messages
-The pipeline is idempotent - re-running with same Gmail messages is safe.
+Check Gemini's response in the logs (`LOG_LEVEL=DEBUG`). This usually points to image quality issues or a receipt with an unusual layout.
+</details>
 
-## License
+<details>
+<summary><strong>Database connection errors</strong></summary>
 
-Proprietary - Internal Use Only
+- **PostgreSQL**: verify credentials and that the database exists.
+- **SQLite**: check write permissions on `tickets.db`.
+</details>
+
+<details>
+<summary><strong>Duplicate receipts</strong></summary>
+
+The pipeline is idempotent thanks to the unique `gmail_id` on `Receipt`: re-running it against the same messages is safe and won't create duplicates.
+</details>
+
+---
+
+## 📄 License
+
+Internal / proprietary use.
+
+<div align="center">
+
+Built with ☕ and a lot of care
+
+</div>
