@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from typing import List
-from datetime import datetime, time
+from datetime import datetime
 
 from src.gmail.reader import list_messages, get_attachments_bytes
 from src.ocr.unified import extract_ticket_data
 from src.db.insert import (
-    insert_supermercado,
-    insert_tienda,
-    insert_ticket,
-    insert_producto,
-    insert_categoria,
-    insert_linea_ticket,
+    insert_supermarket,
+    insert_store,
+    insert_receipt,
+    insert_product,
+    insert_category,
+    insert_receipt_line,
+    insert_source,
+    insert_product_alias,
 )
 from src.config.logger import get_logger
 
@@ -23,82 +25,67 @@ def _validate_ticket_json(ticket_json: dict) -> None:
     Validate that extracted ticket JSON has all required fields.
     Raises ValueError if validation fails.
     """
-    required_fields = ["supermercado", "fecha", "total", "productos"]
+    required_fields = ["supermarket", "date", "total", "products"]
     for field in required_fields:
         if field not in ticket_json:
             raise ValueError(f"Missing required field in ticket JSON: '{field}'")
 
-    # Validate each product
-    productos = ticket_json.get("productos", [])
-    if not isinstance(productos, list):
-        raise ValueError("'productos' must be a list")
+    products = ticket_json.get("products", [])
+    if not isinstance(products, list):
+        raise ValueError("'products' must be a list")
 
     required_product_fields = [
-        "nombre", "categoria", "cantidad", "unidad_medida",
-        "precio_unitario", "precio_total", "tipo_precio", "oferta", "descuento"
+        "name", "category", "quantity", "unit",
+        "original_unit_price", "discount", "final_unit_price", "line_total"
     ]
-    for i, p in enumerate(productos):
+    for i, p in enumerate(products):
         for field in required_product_fields:
             if field not in p or p[field] is None:
                 raise ValueError(f"Product {i} missing required field: '{field}'")
 
 
-def _parse_fecha(fecha_str: str) -> datetime:
+def _parse_date(date_str: str) -> datetime:
     """Parse date string in YYYY-MM-DD format to datetime."""
     try:
-        return datetime.strptime(fecha_str, "%Y-%m-%d")
+        return datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError as e:
-        raise ValueError(f"Invalid date format: {fecha_str}. Expected YYYY-MM-DD") from e
+        raise ValueError(f"Invalid date format: {date_str}. Expected YYYY-MM-DD") from e
 
 
-def _parse_hora(hora_str: str | None) -> time | None:
-    """Parse time string in HH:MM or HH:MM:SS format to time."""
-    if not hora_str:
-        return None
-    try:
-        # Try HH:MM:SS format first
-        return datetime.strptime(hora_str, "%H:%M:%S").time()
-    except ValueError:
-        try:
-            # Fall back to HH:MM format
-            return datetime.strptime(hora_str, "%H:%M").time()
-        except ValueError as e:
-            logger.warning(f"Could not parse time '{hora_str}', ignoring: {e}")
-            return None
-
-
-def _parse_tienda(tienda_str: str | None) -> tuple[str, str, str] | None:
+def _parse_store(store_str: str | None) -> tuple[str, str, str, str, str] | None:
     """
-    Parse tienda string from OCR in format: "C/Tenor Gayarre, 4 (50010, Zaragoza)"
-    Returns (direccion, codigo_postal, ciudad) or None if parsing fails.
+    Parse store string from OCR in format: "C/Tenor Gayarre, 4 (50010, Zaragoza)"
+    Returns (address, postal_code, city, province, country) or None if parsing fails.
     """
-    if not tienda_str:
+    if not store_str:
         return None
 
     try:
-        # Extract content within parentheses
-        if "(" not in tienda_str or ")" not in tienda_str:
-            logger.warning(f"Tienda string does not match expected format: {tienda_str}")
+        if "(" not in store_str or ")" not in store_str:
+            logger.warning(f"Store string does not match expected format: {store_str}")
             return None
 
-        open_paren = tienda_str.rfind("(")
-        close_paren = tienda_str.rfind(")")
+        open_paren = store_str.rfind("(")
+        close_paren = store_str.rfind(")")
 
-        direccion = tienda_str[:open_paren].strip()
-        paren_content = tienda_str[open_paren+1:close_paren].strip()
+        address = store_str[:open_paren].strip()
+        paren_content = store_str[open_paren+1:close_paren].strip()
 
-        # Parse (codigo_postal, ciudad)
         if "," not in paren_content:
             logger.warning(f"Could not parse postal code and city: {paren_content}")
             return None
 
         parts = paren_content.split(",", 1)
-        codigo_postal = parts[0].strip()
-        ciudad = parts[1].strip()
+        postal_code = parts[0].strip()
+        city = parts[1].strip()
 
-        return (direccion, codigo_postal, ciudad)
+        # Province and country are not extracted by OCR, use defaults
+        province = "Unknown"
+        country = "Spain"
+
+        return (address, postal_code, city, province, country)
     except Exception as e:
-        logger.warning(f"Error parsing tienda string '{tienda_str}': {e}")
+        logger.warning(f"Error parsing store string '{store_str}': {e}")
         return None
 
 
@@ -109,53 +96,65 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
     """
     _validate_ticket_json(ticket_json)
 
-    supermercado = ticket_json["supermercado"]
-    fecha = _parse_fecha(ticket_json["fecha"])
-    hora = _parse_hora(ticket_json.get("hora"))
-    tienda_str = ticket_json.get("tienda")
+    supermarket_name = ticket_json["supermarket"]
+    date_time = _parse_date(ticket_json["date"])
+    store_str = ticket_json.get("store")
     total = float(ticket_json["total"])
-    productos = ticket_json["productos"]
+    products = ticket_json["products"]
+    source_name = ticket_json.get("source", "Email")
 
-    id_sup = insert_supermercado(supermercado)
+    # Insert supermarket and source
+    id_supermarket = insert_supermarket(supermarket_name)
+    id_source = insert_source(source_name)
 
-    # Parse and insert tienda if available
-    tienda_id = None
-    if tienda_str:
-        parsed_tienda = _parse_tienda(tienda_str)
-        if parsed_tienda:
-            direccion, codigo_postal, ciudad = parsed_tienda
-            tienda_id = insert_tienda(id_sup, direccion, codigo_postal, ciudad)
+    # Parse and insert store if available
+    id_store = None
+    if store_str:
+        parsed_store = _parse_store(store_str)
+        if parsed_store:
+            address, postal_code, city, province, country = parsed_store
+            id_store = insert_store(id_supermarket, address, postal_code, city, province, country)
 
-    id_ticket = insert_ticket(
-        id_supermercado=id_sup,
-        fecha=fecha,
-        id_mensaje_gmail=gmail_msg_id,
-        total=total,
-        tienda_id=tienda_id,
-        hora=hora,
+    if id_store is None:
+        logger.warning(f"Could not parse store information, using default store")
+        id_store = insert_store(id_supermarket, "Unknown", "00000", "Unknown", "Unknown", "Spain")
+
+    # Insert receipt
+    id_receipt = insert_receipt(
+        gmail_id=gmail_msg_id,
+        datetime_val=date_time,
+        total_amount=total,
+        id_store=id_store,
+        id_source=id_source,
     )
 
-    for i, p in enumerate(productos):
+    for i, p in enumerate(products):
         try:
-            id_cat = insert_categoria(p["categoria"])
-            id_prod = insert_producto(p["nombre"], id_cat, p["unidad_medida"])
+            # Insert category and product
+            id_category = insert_category(p["category"])
+            id_brand = None  # OCR doesn't extract brand, could be enhanced later
+            id_product = insert_product(p["name"], id_category, id_brand)
 
-            insert_linea_ticket(
-                id_ticket=id_ticket,
-                id_producto=id_prod,
-                cantidad=float(p["cantidad"]),
-                unidad_medida=p["unidad_medida"],
-                precio_unitario=float(p["precio_unitario"]),
-                precio_total=float(p["precio_total"]),
-                oferta=bool(p["oferta"]),
-                descuento=float(p["descuento"]),
-                tipo_precio=p["tipo_precio"],
+            # Insert product alias if needed (maps original OCR name to normalized)
+            if p.get("original_name") and p["original_name"] != p["name"]:
+                insert_product_alias(p["original_name"], id_product)
+
+            # Insert receipt line
+            insert_receipt_line(
+                id_receipt=id_receipt,
+                id_product=id_product,
+                quantity=float(p["quantity"]),
+                unit=p["unit"],
+                original_unit_price=float(p["original_unit_price"]),
+                discount=float(p["discount"]),
+                final_unit_price=float(p["final_unit_price"]),
+                line_total=float(p["line_total"]),
             )
         except Exception as e:
-            logger.error(f"Error inserting product {i} ({p.get('nombre', 'UNKNOWN')}): {e}")
+            logger.error(f"Error inserting product {i} ({p.get('name', 'UNKNOWN')}): {e}")
             raise
 
-    return id_ticket
+    return id_receipt
 
 
 def run_pipeline(query: str = "from:mercadona") -> List[int]:
@@ -178,10 +177,10 @@ def run_pipeline(query: str = "from:mercadona") -> List[int]:
                     logger.info(f"OCR processing: {filename} ({mime})")
 
                     ticket_json = extract_ticket_data(data, mime)
-                    ticket_id = process_ticket_json(ticket_json, msg_id)
+                    receipt_id = process_ticket_json(ticket_json, msg_id)
 
-                    inserted_ids.append(ticket_id)
-                    logger.info(f"Successfully inserted ticket {ticket_id}")
+                    inserted_ids.append(receipt_id)
+                    logger.info(f"Successfully inserted receipt {receipt_id}")
                 except Exception as e:
                     logger.error(f"Error processing attachment {filename}: {e}")
                     continue
@@ -189,7 +188,7 @@ def run_pipeline(query: str = "from:mercadona") -> List[int]:
             logger.error(f"Error processing message {msg_id}: {e}")
             continue
 
-    logger.info(f"Pipeline finished. Inserted {len(inserted_ids)} tickets.")
+    logger.info(f"Pipeline finished. Inserted {len(inserted_ids)} receipts.")
     return inserted_ids
 
 

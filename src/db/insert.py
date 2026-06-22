@@ -1,216 +1,282 @@
 from sqlalchemy.exc import IntegrityError
+from datetime import date
 from src.db import connection
-from src.db.models import Supermercado, Categoria, Producto, Ticket, LineaTicket, Tienda
+from src.db.models import (
+    Supermarket, Category, Product, Receipt, ReceiptLine, Store, Brand,
+    ProductAlias, Source, PriceHistory
+)
 from src.config.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-def insert_supermercado(nombre: str) -> int:
-    """
-    Insert or retrieve a supermarket by name.
-    Uses upsert logic to avoid duplicates.
-    """
+def insert_supermarket(name: str) -> int:
+    """Insert or retrieve a supermarket by name."""
     db = connection.SessionLocal()
     try:
-        sup = db.query(Supermercado).filter_by(nombre=nombre).first()
-        if sup:
-            return sup.id
+        supermarket = db.query(Supermarket).filter_by(name=name).first()
+        if supermarket:
+            return supermarket.id_supermarket
 
-        sup = Supermercado(nombre=nombre)
-        db.add(sup)
+        supermarket = Supermarket(name=name)
+        db.add(supermarket)
         db.commit()
-        logger.debug(f"Inserted new supermercado: {nombre} (id={sup.id})")
-        return sup.id
+        logger.debug(f"Inserted new supermarket: {name} (id={supermarket.id_supermarket})")
+        return supermarket.id_supermarket
     except IntegrityError as e:
         db.rollback()
-        logger.warning(f"Integrity error inserting supermercado {nombre}: {e}")
-        # Try again after rollback
-        sup = db.query(Supermercado).filter_by(nombre=nombre).first()
-        if sup:
-            return sup.id
+        logger.warning(f"Integrity error inserting supermarket {name}: {e}")
+        supermarket = db.query(Supermarket).filter_by(name=name).first()
+        if supermarket:
+            return supermarket.id_supermarket
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inserting supermercado {nombre}: {e}")
+        logger.error(f"Error inserting supermarket {name}: {e}")
         raise
     finally:
         db.close()
 
 
-def insert_tienda(supermercado_id: int, direccion: str, codigo_postal: str, ciudad: str) -> int:
-    """
-    Insert or retrieve a store location.
-    Uses upsert logic to avoid duplicates (unique by supermercado + direccion + codigo_postal).
-    """
+def insert_store(supermarket_id: int, address: str, postal_code: str,
+                 city: str, province: str, country: str) -> int:
+    """Insert or retrieve a store location."""
     db = connection.SessionLocal()
     try:
-        tienda = (
-            db.query(Tienda)
-            .filter_by(supermercado_id=supermercado_id, direccion=direccion, codigo_postal=codigo_postal)
+        store = (
+            db.query(Store)
+            .filter_by(id_supermarket=supermarket_id, address=address, postal_code=postal_code)
             .first()
         )
-        if tienda:
-            return tienda.id
+        if store:
+            return store.id_store
 
-        tienda = Tienda(
-            supermercado_id=supermercado_id,
-            direccion=direccion,
-            codigo_postal=codigo_postal,
-            ciudad=ciudad,
+        store = Store(
+            id_supermarket=supermarket_id,
+            address=address,
+            postal_code=postal_code,
+            city=city,
+            province=province,
+            country=country,
         )
-        db.add(tienda)
+        db.add(store)
         db.commit()
-        logger.debug(f"Inserted new tienda: {direccion} (id={tienda.id})")
-        return tienda.id
+        logger.debug(f"Inserted new store: {address} (id={store.id_store})")
+        return store.id_store
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inserting tienda {direccion}: {e}")
+        logger.error(f"Error inserting store {address}: {e}")
         raise
     finally:
         db.close()
 
 
-def insert_categoria(nombre: str) -> int:
-    """
-    Insert or retrieve a product category by name.
-    Uses upsert logic to avoid duplicates.
-    """
+def insert_category(name: str, parent_category_id: int = None) -> int:
+    """Insert or retrieve a product category by name."""
     db = connection.SessionLocal()
     try:
-        cat = db.query(Categoria).filter_by(nombre=nombre).first()
-        if cat:
-            return cat.id
+        category = db.query(Category).filter_by(name=name).first()
+        if category:
+            return category.id_category
 
-        cat = Categoria(nombre=nombre)
-        db.add(cat)
+        category = Category(name=name, parent_category_id=parent_category_id)
+        db.add(category)
         db.commit()
-        logger.debug(f"Inserted new categoria: {nombre} (id={cat.id})")
-        return cat.id
+        logger.debug(f"Inserted new category: {name} (id={category.id_category})")
+        return category.id_category
     except IntegrityError as e:
         db.rollback()
-        logger.warning(f"Integrity error inserting categoria {nombre}: {e}")
-        # Try again after rollback
-        cat = db.query(Categoria).filter_by(nombre=nombre).first()
-        if cat:
-            return cat.id
+        logger.warning(f"Integrity error inserting category {name}: {e}")
+        category = db.query(Category).filter_by(name=name).first()
+        if category:
+            return category.id_category
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inserting categoria {nombre}: {e}")
+        logger.error(f"Error inserting category {name}: {e}")
         raise
     finally:
         db.close()
 
 
-def insert_producto(nombre: str, id_categoria: int, unidad_medida: str) -> int:
-    """
-    Insert or retrieve a product.
-    Uses upsert logic to avoid duplicates (unique by name + category + unit).
-    """
+def insert_brand(name: str) -> int:
+    """Insert or retrieve a brand by name."""
     db = connection.SessionLocal()
     try:
-        prod = (
-            db.query(Producto)
-            .filter_by(nombre=nombre, id_categoria=id_categoria, unidad_medida=unidad_medida)
+        brand = db.query(Brand).filter_by(name=name).first()
+        if brand:
+            return brand.id_brand
+
+        brand = Brand(name=name)
+        db.add(brand)
+        db.commit()
+        logger.debug(f"Inserted new brand: {name} (id={brand.id_brand})")
+        return brand.id_brand
+    except IntegrityError as e:
+        db.rollback()
+        logger.warning(f"Integrity error inserting brand {name}: {e}")
+        brand = db.query(Brand).filter_by(name=name).first()
+        if brand:
+            return brand.id_brand
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inserting brand {name}: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def insert_product(normalized_name: str, id_category: int, id_brand: int = None) -> int:
+    """Insert or retrieve a product."""
+    db = connection.SessionLocal()
+    try:
+        product = (
+            db.query(Product)
+            .filter_by(normalized_name=normalized_name, id_category=id_category, id_brand=id_brand)
             .first()
         )
-        if prod:
-            return prod.id
+        if product:
+            return product.id_product
 
-        prod = Producto(
-            nombre=nombre,
-            id_categoria=id_categoria,
-            unidad_medida=unidad_medida,
+        product = Product(
+            normalized_name=normalized_name,
+            id_category=id_category,
+            id_brand=id_brand,
         )
-        db.add(prod)
+        db.add(product)
         db.commit()
-        logger.debug(f"Inserted new producto: {nombre} (id={prod.id})")
-        return prod.id
+        logger.debug(f"Inserted new product: {normalized_name} (id={product.id_product})")
+        return product.id_product
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inserting producto {nombre}: {e}")
+        logger.error(f"Error inserting product {normalized_name}: {e}")
         raise
     finally:
         db.close()
 
 
-def insert_ticket(id_supermercado: int, fecha, id_mensaje_gmail: str,
-                  total: float, tienda_id: int = None, hora = None) -> int:
-    """
-    Insert or retrieve a ticket by Gmail message ID.
-    Uses upsert logic to prevent duplicate processing.
-    """
+def insert_product_alias(original_name: str, id_product: int) -> int:
+    """Insert a product alias."""
     db = connection.SessionLocal()
     try:
-        ticket = db.query(Ticket).filter_by(id_mensaje_gmail=id_mensaje_gmail).first()
-        if ticket:
-            logger.debug(f"Ticket already exists for Gmail message {id_mensaje_gmail}")
-            return ticket.id
-
-        ticket = Ticket(
-            id_supermercado=id_supermercado,
-            fecha=fecha,
-            hora=hora,
-            tienda_id=tienda_id,
-            total=total,
-            id_mensaje_gmail=id_mensaje_gmail,
-        )
-        db.add(ticket)
+        alias = ProductAlias(original_name=original_name, id_product=id_product)
+        db.add(alias)
         db.commit()
-        logger.debug(f"Inserted new ticket: {id_mensaje_gmail} (id={ticket.id})")
-        return ticket.id
+        logger.debug(f"Inserted product alias: {original_name} (id={alias.id_alias})")
+        return alias.id_alias
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inserting product alias {original_name}: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def insert_source(name: str) -> int:
+    """Insert or retrieve a source by name."""
+    db = connection.SessionLocal()
+    try:
+        source = db.query(Source).filter_by(name=name).first()
+        if source:
+            return source.id_source
+
+        source = Source(name=name)
+        db.add(source)
+        db.commit()
+        logger.debug(f"Inserted new source: {name} (id={source.id_source})")
+        return source.id_source
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inserting source {name}: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def insert_receipt(gmail_id: str, datetime_val, total_amount: float,
+                   id_store: int, id_source: int) -> int:
+    """Insert or retrieve a receipt by Gmail message ID."""
+    db = connection.SessionLocal()
+    try:
+        receipt = db.query(Receipt).filter_by(gmail_id=gmail_id).first()
+        if receipt:
+            logger.debug(f"Receipt already exists for Gmail message {gmail_id}")
+            return receipt.id_receipt
+
+        receipt = Receipt(
+            gmail_id=gmail_id,
+            datetime=datetime_val,
+            total_amount=total_amount,
+            id_store=id_store,
+            id_source=id_source,
+        )
+        db.add(receipt)
+        db.commit()
+        logger.debug(f"Inserted new receipt: {gmail_id} (id={receipt.id_receipt})")
+        return receipt.id_receipt
     except IntegrityError as e:
         db.rollback()
-        logger.warning(f"Integrity error inserting ticket {id_mensaje_gmail}: {e}")
-        # Try again after rollback
-        ticket = db.query(Ticket).filter_by(id_mensaje_gmail=id_mensaje_gmail).first()
-        if ticket:
-            return ticket.id
+        logger.warning(f"Integrity error inserting receipt {gmail_id}: {e}")
+        receipt = db.query(Receipt).filter_by(gmail_id=gmail_id).first()
+        if receipt:
+            return receipt.id_receipt
         raise
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inserting ticket {id_mensaje_gmail}: {e}")
+        logger.error(f"Error inserting receipt {gmail_id}: {e}")
         raise
     finally:
         db.close()
 
 
-def insert_linea_ticket(
-    id_ticket: int,
-    id_producto: int,
-    cantidad: float,
-    unidad_medida: str,
-    precio_unitario: float,
-    precio_total: float,
-    oferta: bool,
-    descuento: float,
-    tipo_precio: str = "unidad",
-) -> int:
-    """
-    Insert a ticket line item.
-    Each line is unique per ticket+producto combination.
-    """
+def insert_receipt_line(id_receipt: int, id_product: int, quantity: float,
+                        unit: str, original_unit_price: float,
+                        discount: float, final_unit_price: float,
+                        line_total: float) -> int:
+    """Insert a receipt line item."""
     db = connection.SessionLocal()
     try:
-        linea = LineaTicket(
-            id_ticket=id_ticket,
-            id_producto=id_producto,
-            cantidad=cantidad,
-            unidad_medida=unidad_medida,
-            precio_unitario=precio_unitario,
-            precio_total=precio_total,
-            oferta=oferta,
-            descuento=descuento,
-            tipo_precio=tipo_precio,
+        line = ReceiptLine(
+            id_receipt=id_receipt,
+            id_product=id_product,
+            quantity=quantity,
+            unit=unit,
+            original_unit_price=original_unit_price,
+            discount=discount,
+            final_unit_price=final_unit_price,
+            line_total=line_total,
         )
-        db.add(linea)
+        db.add(line)
         db.commit()
-        logger.debug(f"Inserted linea_ticket {linea.id}")
-        return linea.id
+        logger.debug(f"Inserted receipt_line {line.id_line}")
+        return line.id_line
     except Exception as e:
         db.rollback()
-        logger.error(f"Error inserting linea_ticket: {e}")
+        logger.error(f"Error inserting receipt_line: {e}")
+        raise
+    finally:
+        db.close()
+
+
+def insert_price_history(id_product: int, id_supermarket: int,
+                        price_date: date, price: float) -> int:
+    """Insert a price history record."""
+    db = connection.SessionLocal()
+    try:
+        history = PriceHistory(
+            id_product=id_product,
+            id_supermarket=id_supermarket,
+            date=price_date,
+            price=price,
+        )
+        db.add(history)
+        db.commit()
+        logger.debug(f"Inserted price_history {history.id_history}")
+        return history.id_history
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error inserting price_history: {e}")
         raise
     finally:
         db.close()

@@ -1,85 +1,128 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Time
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Date, Numeric
 from sqlalchemy.orm import relationship
 from src.db.connection import Base
-from datetime import datetime, timezone
 
 
-class Supermercado(Base):
-    __tablename__ = "supermercado"
+class Category(Base):
+    __tablename__ = "category"
 
-    id = Column(Integer, primary_key=True)
-    nombre = Column(String, unique=True, nullable=False)
+    id_category = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    parent_category_id = Column(Integer, ForeignKey("category.id_category"), nullable=True)
 
-    tiendas = relationship("Tienda", back_populates="supermercado")
-    tickets = relationship("Ticket", back_populates="supermercado")
-
-
-class Tienda(Base):
-    __tablename__ = "tienda"
-
-    id = Column(Integer, primary_key=True)
-    supermercado_id = Column(Integer, ForeignKey("supermercado.id"), nullable=False)
-    direccion = Column(String, nullable=False)
-    codigo_postal = Column(String, nullable=False)
-    ciudad = Column(String, nullable=False)
-
-    supermercado = relationship("Supermercado", back_populates="tiendas")
-    tickets = relationship("Ticket", back_populates="tienda")
+    children = relationship("Category", back_populates="parent", remote_side=[id_category])
+    parent = relationship("Category", back_populates="children", remote_side=[parent_category_id])
+    products = relationship("Product", back_populates="category")
 
 
-class Ticket(Base):
-    __tablename__ = "ticket"
+class Brand(Base):
+    __tablename__ = "brand"
 
-    id = Column(Integer, primary_key=True)
-    id_supermercado = Column(Integer, ForeignKey("supermercado.id"), nullable=False)
-    tienda_id = Column(Integer, ForeignKey("tienda.id"), nullable=True)
-    fecha = Column(DateTime, nullable=False)
-    hora = Column(Time, nullable=True)
-    total = Column(Float, nullable=False)
-    id_mensaje_gmail = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    id_brand = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
 
-    supermercado = relationship("Supermercado", back_populates="tickets")
-    tienda = relationship("Tienda", back_populates="tickets")
-    lineas = relationship("LineaTicket", back_populates="ticket")
+    products = relationship("Product", back_populates="brand")
 
 
-class Categoria(Base):
-    __tablename__ = "categoria"
+class Product(Base):
+    __tablename__ = "product"
 
-    id = Column(Integer, primary_key=True)
-    nombre = Column(String, unique=True, nullable=False)
+    id_product = Column(Integer, primary_key=True)
+    normalized_name = Column(String, nullable=False)
+    id_category = Column(Integer, ForeignKey("category.id_category"), nullable=False)
+    id_brand = Column(Integer, ForeignKey("brand.id_brand"), nullable=True)
 
-    productos = relationship("Producto", back_populates="categoria")
-
-
-class Producto(Base):
-    __tablename__ = "producto"
-
-    id = Column(Integer, primary_key=True)
-    nombre = Column(String, nullable=False)
-    id_categoria = Column(Integer, ForeignKey("categoria.id"), nullable=False)
-    unidad_medida = Column(String, nullable=False)
-
-    categoria = relationship("Categoria", back_populates="productos")
-    lineas = relationship("LineaTicket", back_populates="producto")
+    category = relationship("Category", back_populates="products")
+    brand = relationship("Brand", back_populates="products")
+    aliases = relationship("ProductAlias", back_populates="product")
+    receipt_lines = relationship("ReceiptLine", back_populates="product")
+    price_history = relationship("PriceHistory", back_populates="product")
 
 
-class LineaTicket(Base):
-    __tablename__ = "linea_ticket"
+class ProductAlias(Base):
+    __tablename__ = "product_alias"
 
-    id = Column(Integer, primary_key=True)
-    id_ticket = Column(Integer, ForeignKey("ticket.id"), nullable=False)
-    id_producto = Column(Integer, ForeignKey("producto.id"), nullable=False)
+    id_alias = Column(Integer, primary_key=True)
+    original_name = Column(String, nullable=False)
+    id_product = Column(Integer, ForeignKey("product.id_product"), nullable=False)
 
-    cantidad = Column(Float, nullable=False)
-    unidad_medida = Column(String, nullable=False)
-    precio_unitario = Column(Float, nullable=False)
-    precio_total = Column(Float, nullable=False)
+    product = relationship("Product", back_populates="aliases")
 
-    tipo_precio = Column(String, nullable=False)  # "unidad" | "peso"
-    oferta = Column(Boolean, default=False)
-    descuento = Column(Float, default=0.0)
 
-    ticket = relationship("Ticket", back_populates="lineas")
-    producto = relationship("Producto", back_populates="lineas")
+class Supermarket(Base):
+    __tablename__ = "supermarket"
+
+    id_supermarket = Column(Integer, primary_key=True)
+    name = Column(String, unique=True, nullable=False)
+
+    stores = relationship("Store", back_populates="supermarket")
+    price_history = relationship("PriceHistory", back_populates="supermarket")
+
+
+class Store(Base):
+    __tablename__ = "store"
+
+    id_store = Column(Integer, primary_key=True)
+    id_supermarket = Column(Integer, ForeignKey("supermarket.id_supermarket"), nullable=False)
+    address = Column(String, nullable=False)
+    postal_code = Column(String, nullable=False)
+    city = Column(String, nullable=False)
+    province = Column(String, nullable=False)
+    country = Column(String, nullable=False)
+
+    supermarket = relationship("Supermarket", back_populates="stores")
+    receipts = relationship("Receipt", back_populates="store")
+
+
+class Source(Base):
+    __tablename__ = "source"
+
+    id_source = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+
+    receipts = relationship("Receipt", back_populates="source")
+
+
+class Receipt(Base):
+    __tablename__ = "receipt"
+
+    id_receipt = Column(Integer, primary_key=True)
+    gmail_id = Column(String, unique=True, nullable=False)
+    datetime = Column(DateTime, nullable=False)
+    total_amount = Column(Numeric, nullable=False)
+    id_store = Column(Integer, ForeignKey("store.id_store"), nullable=False)
+    id_source = Column(Integer, ForeignKey("source.id_source"), nullable=False)
+
+    store = relationship("Store", back_populates="receipts")
+    source = relationship("Source", back_populates="receipts")
+    lines = relationship("ReceiptLine", back_populates="receipt")
+
+
+class ReceiptLine(Base):
+    __tablename__ = "receipt_line"
+
+    id_line = Column(Integer, primary_key=True)
+    id_receipt = Column(Integer, ForeignKey("receipt.id_receipt"), nullable=False)
+    id_product = Column(Integer, ForeignKey("product.id_product"), nullable=False)
+    quantity = Column(Numeric, nullable=False)
+    unit = Column(String, nullable=False)
+    original_unit_price = Column(Numeric, nullable=False)
+    discount = Column(Numeric, nullable=False)
+    final_unit_price = Column(Numeric, nullable=False)
+    line_total = Column(Numeric, nullable=False)
+
+    receipt = relationship("Receipt", back_populates="lines")
+    product = relationship("Product", back_populates="receipt_lines")
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id_history = Column(Integer, primary_key=True)
+    id_product = Column(Integer, ForeignKey("product.id_product"), nullable=False)
+    id_supermarket = Column(Integer, ForeignKey("supermarket.id_supermarket"), nullable=False)
+    date = Column(Date, nullable=False)
+    price = Column(Numeric, nullable=False)
+
+    product = relationship("Product", back_populates="price_history")
+    supermarket = relationship("Supermarket", back_populates="price_history")
