@@ -14,6 +14,7 @@ from src.db.insert import (
     insert_receipt_line,
     insert_source,
     insert_product_alias,
+    insert_brand,
 )
 from src.config.logger import get_logger
 
@@ -132,7 +133,11 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
         try:
             # Insert category and product
             id_category = insert_category(p["category"])
-            id_brand = None  # OCR doesn't extract brand, could be enhanced later
+
+            # Insert brand if OCR identified one for this product
+            brand_name = p.get("brand")
+            id_brand = insert_brand(brand_name) if brand_name else None
+
             id_product = insert_product(p["name"], id_category, id_brand)
 
             # Insert product alias if needed (maps original OCR name to normalized)
