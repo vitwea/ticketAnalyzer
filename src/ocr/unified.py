@@ -142,7 +142,11 @@ El campo "brand" debe reflejar la marca real del producto, esté impresa literal
 - Devuelve SIEMPRE un JSON válido, sin texto adicional.
 - No incluyas explicaciones.
 """),
-        ]
+        ],
+
+        generation_config={    
+        "response_mime_type": "application/json"
+    }
     )
 
     raw = response.text.strip()
