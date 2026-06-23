@@ -162,7 +162,7 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
     return id_receipt
 
 
-def run_pipeline(query: str = "from:mercadona") -> List[int]:
+def run_pipeline(query: str = "from:mercadona OR from:dia OR from:lidl OR from:alcampo") -> List[int]:
     logger.info(f"Running pipeline with query: {query}")
 
     msgs = list_messages(query)
