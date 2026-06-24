@@ -9,6 +9,14 @@ from src.config.logger import get_logger
 
 logger = get_logger(__name__)
 
+def receipt_exists(gmail_id: str) -> bool:
+    """Return True if a receipt with this Gmail message ID already exists."""
+    db = connection.SessionLocal()
+    try:
+        return db.query(Receipt).filter_by(gmail_id=gmail_id).first() is not None
+    finally:
+        db.close()
+
 
 def insert_supermarket(name: str) -> int:
     """Insert or retrieve a supermarket by name."""
