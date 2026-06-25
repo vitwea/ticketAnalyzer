@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List
 from datetime import datetime
+import re
 
 from src.gmail.reader import list_messages, get_attachments_bytes
 from src.ocr.unified import extract_ticket_data
@@ -55,36 +56,41 @@ def _parse_date(date_str: str) -> datetime:
 
 def _parse_store(store_str: str | None) -> tuple[str, str, str, str, str] | None:
     """
-    Parse store string from OCR in format: "C/Tenor Gayarre, 4 (50010, Zaragoza)"
-    Returns (address, postal_code, city, province, country) or None if parsing fails.
+    Parse store string from OCR into (address, postal_code, city, province, country).
+
+    Accepts the canonical format produced by the OCR prompt:
+        "Dirección (CP, Ciudad)"
+        e.g. "Avda. Francisco de Goya, 61 (50005, Zaragoza)"
+             "Pza. Roma, s/n (50010, Zaragoza)"
+             "C/ Vicente Berdusán, 44 (50010, Zaragoza)"
+             "Cl. Tomás Bretón, 46 (50005, Zaragoza)"
+
+    Returns None if parsing fails.
     """
     if not store_str:
         return None
 
     try:
-        if "(" not in store_str or ")" not in store_str:
-            logger.warning(f"Store string does not match expected format: {store_str}")
-            return None
+        # Strategy 1: canonical format "address (postal_code, city)"
+        m = re.search(r'^(.*?)\s*\((\d{4,5}),\s*(.+?)\)\s*$', store_str.strip())
+        if m:
+            address     = m.group(1).strip()
+            postal_code = m.group(2).strip()
+            city        = m.group(3).strip()
+            return (address, postal_code, city, "Unknown", "Spain")
 
-        open_paren = store_str.rfind("(")
-        close_paren = store_str.rfind(")")
+        # Strategy 2: fallback — postal code appears without parens
+        # e.g. "Avda. Francisco de Goya, 61 50005 Zaragoza"
+        m2 = re.search(r'(.+?)\s+(\d{5})\s+(.+)', store_str.strip())
+        if m2:
+            address     = m2.group(1).strip()
+            postal_code = m2.group(2).strip()
+            city        = m2.group(3).strip()
+            return (address, postal_code, city, "Unknown", "Spain")
 
-        address = store_str[:open_paren].strip()
-        paren_content = store_str[open_paren+1:close_paren].strip()
+        logger.warning(f"Could not parse store string: '{store_str}'")
+        return None
 
-        if "," not in paren_content:
-            logger.warning(f"Could not parse postal code and city: {paren_content}")
-            return None
-
-        parts = paren_content.split(",", 1)
-        postal_code = parts[0].strip()
-        city = parts[1].strip()
-
-        # Province and country are not extracted by OCR, use defaults
-        province = "Unknown"
-        country = "Spain"
-
-        return (address, postal_code, city, province, country)
     except Exception as e:
         logger.warning(f"Error parsing store string '{store_str}': {e}")
         return None
@@ -98,17 +104,16 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
     _validate_ticket_json(ticket_json)
 
     supermarket_name = ticket_json["supermarket"]
-    date_time = _parse_date(ticket_json["date"])
-    store_str = ticket_json.get("store")
-    total = float(ticket_json["total"])
-    products = ticket_json["products"]
-    source_name = ticket_json.get("source", "Email")
+    date_time        = _parse_date(ticket_json["date"])
+    store_str        = ticket_json.get("store")
+    total            = float(ticket_json["total"])
+    products         = ticket_json["products"]
+    source_name      = ticket_json.get("source", "Email")
 
-    # Insert supermarket and source
     id_supermarket = insert_supermarket(supermarket_name)
-    id_source = insert_source(source_name)
+    id_source      = insert_source(source_name)
 
-    # Parse and insert store if available
+    # Parse and insert store
     id_store = None
     if store_str:
         parsed_store = _parse_store(store_str)
@@ -117,10 +122,9 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
             id_store = insert_store(id_supermarket, address, postal_code, city, province, country)
 
     if id_store is None:
-        logger.warning(f"Could not parse store information, using default store")
+        logger.warning("Could not parse store information, using default store")
         id_store = insert_store(id_supermarket, "Unknown", "00000", "Unknown", "Unknown", "Spain")
 
-    # Insert receipt
     id_receipt = insert_receipt(
         gmail_id=gmail_msg_id,
         datetime_val=date_time,
@@ -131,20 +135,16 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
 
     for i, p in enumerate(products):
         try:
-            # Insert category and product
             id_category = insert_category(p["category"])
 
-            # Insert brand if OCR identified one for this product
             brand_name = p.get("brand")
-            id_brand = insert_brand(brand_name) if brand_name else None
+            id_brand   = insert_brand(brand_name) if brand_name else None
 
             id_product = insert_product(p["name"], id_category, id_brand)
 
-            # Insert product alias if needed (maps original OCR name to normalized)
             if p.get("original_name") and p["original_name"] != p["name"]:
                 insert_product_alias(p["original_name"], id_product)
 
-            # Insert receipt line
             insert_receipt_line(
                 id_receipt=id_receipt,
                 id_product=id_product,
@@ -164,8 +164,8 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
 
 def run_pipeline(query: str = (
     'from:mercadona '
+    'OR from:(dia.es) '
     'OR subject:(lidl ticket) '
-    'OR subject:(dia ticket) '
     'OR subject:(alcampo ticket)'
 )) -> List[int]:
     logger.info(f"Running pipeline with query: {query}")
@@ -174,7 +174,7 @@ def run_pipeline(query: str = (
     logger.info(f"Found {len(msgs)} messages.")
 
     inserted_ids = []
- 
+
     for msg in msgs:
         msg_id = msg["id"]
         logger.info(f"Processing Gmail message {msg_id}")
@@ -185,10 +185,8 @@ def run_pipeline(query: str = (
             for filename, mime, data in attachments:
                 try:
                     logger.info(f"OCR processing: {filename} ({mime})")
-
                     ticket_json = extract_ticket_data(data, mime)
-                    receipt_id = process_ticket_json(ticket_json, msg_id)
-
+                    receipt_id  = process_ticket_json(ticket_json, msg_id)
                     inserted_ids.append(receipt_id)
                     logger.info(f"Successfully inserted receipt {receipt_id}")
                 except Exception as e:

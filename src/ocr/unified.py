@@ -57,7 +57,7 @@ REGLA 1 — NOMBRE DEL SUPERMERCADO
 El campo "supermarket" contiene ÚNICAMENTE el nombre comercial de la cadena,
 NUNCA la razón social legal ni el nombre de la franquicia.
 
-Tabla de normalización OBLIGATORIA:
+── CAPA 1: supermercados conocidos (normalización exacta) ──
   "MERCADONA, S.A." / "MERCADONA S.A."              → "Mercadona"
   "LIDL SUPERMERCADOS S.A.U." / cualquier "LIDL…"  → "Lidl"
   "DIA, S.A." y CUALQUIER franquicia de Dia         → "Dia"
@@ -66,14 +66,30 @@ Tabla de normalización OBLIGATORIA:
   "EROSKI …"                                        → "Eroski"
   "ALDI …"                                          → "Aldi"
   "CONSUM …"                                        → "Consum"
+  "CAPRABO …"                                       → "Caprabo"
+  "AHORRAMAS …"                                     → "Ahorramas"
+  "CONDIS …"                                        → "Condis"
+  "GADIS …"                                         → "Gadis"
+  "EL CORTE INGLÉS …" / "SUPERCOR …"               → "El Corte Inglés"
+  "SIMPLY …"                                        → "Simply"
+  "SUPERSOL …" / "COALIMENT …"                      → "Supersol"
 
-Cómo detectar tickets de Dia con razón social franquiciada:
-  Los tickets de franquicias Dia (p.ej. "ALIMENTACION PELLEJERO BRETON, S.L.")
-  contienen alguna de estas señales → en ese caso usa SIEMPRE "Dia":
-    • "Productos vendidos por Dia"
-    • "Total venta Dia"
-    • "REF.DIA:" en los datos de la operación
-    • Logo o texto "dia" en el ticket digital
+── CAPA 2: supermercado desconocido (regla general) ──
+  Si la cabecera no coincide con ninguno de los anteriores:
+  1. Busca el nombre comercial en logos, textos destacados o cabecera del ticket.
+  2. Elimina la forma jurídica: S.A., S.L., S.A.U., S.C., S.L.U., S.COOP., C.B. y similares.
+  3. Elimina el NIF/CIF (letra + 8 dígitos) si aparece junto al nombre.
+  4. Usa el nombre resultante en formato título (primera letra mayúscula).
+     Ejemplo: "SUPERMERCADOS PACO GARCIA, S.L. B12345678" → "Supermercados Paco Garcia"
+
+── DETECCIÓN DE FRANQUICIAS ──
+  Algunos tickets muestran la razón social del franquiciado en cabecera pero
+  el nombre real de la cadena aparece en el cuerpo del ticket.
+  Señales que identifican la cadena real (aplica con cualquier supermercado):
+    • "Productos vendidos por X" → cadena = X
+    • "Total venta X"           → cadena = X
+    • "REF.X:" en datos de operación → cadena = X
+    • Logo o marca visible en el ticket digital
 
 ════════════════════════════════════════════════════════════
 REGLA 2 — TIENDA (STORE)
@@ -82,47 +98,54 @@ Formato OBLIGATORIO: "Dirección (CP, Ciudad)"
   Ejemplo: "Avda. Francisco de Goya, 61 (50005, Zaragoza)"
 
 PRIORIDAD de fuentes (de mayor a menor):
-  1. Sección "Compra realizada en" al final del ticket digital (más limpia)
+  1. Sección "Compra realizada en" / "Datos de la tienda" al final del ticket digital
   2. Cabecera del ticket
+  3. Pie del ticket (datos de la operación)
 
 Normalización de la dirección:
   - Convierte MAYÚSCULAS a formato título: "AVDA. FRANCISCO DE GOYA, 61" → "Avda. Francisco de Goya, 61"
-  - Expande abreviaturas comunes: CL/C/ → C/, AVDA → Avda., PZA → Pza., C.C. → C.C.
-  - Si la dirección incluye "con C/ …" o "esquina …" (intersección), omite esa parte:
+  - Expande abreviaturas: CL → C/, AVDA → Avda., PZA → Pza., URB → Urb., C.C. → C.C.
+  - Si la dirección incluye intersección ("con C/ …", "esq. …", "esquina …"), omite esa parte:
       "C/ Vicente Berdusán, 44, con C/ Italia" → "C/ Vicente Berdusán, 44"
 
-Dirección en Dia: la calle aparece en la cabecera ("CL TOMAS BRETON 46") y el CP+ciudad
-  al pie del ticket en los datos de la operación ("CP:50005 Zaragoza").
-  Combínalos: "Cl. Tomás Bretón, 46 (50005, Zaragoza)"
+Cuando dirección y CP/ciudad están en zonas distintas del ticket:
+  Algunos tickets (p.ej. Dia) muestran la calle en la cabecera y el CP+ciudad
+  en el pie (formato "CP:50005 Zaragoza" o "C.P.: 50005 - Zaragoza").
+  En ese caso combina ambas partes en el formato estándar.
+  Aplica esta lógica con CUALQUIER supermercado, no solo Dia.
 
 Si NO puedes identificar dirección + CP + ciudad con seguridad → usa null. No inventes.
 
 ════════════════════════════════════════════════════════════
 REGLA 3 — DESCUENTOS DE FIDELIDAD Y PROMOCIONALES
 ════════════════════════════════════════════════════════════
-En tickets de Lidl (y eventualmente otros), los descuentos aparecen como líneas
-secundarias INMEDIATAMENTE DESPUÉS del producto al que aplican:
+En cualquier supermercado, los descuentos sobre un producto concreto aparecen
+como líneas secundarias INMEDIATAMENTE DESPUÉS del producto al que aplican.
 
-  Nombres que identifican estas líneas de descuento (NO son productos):
-    "PROMO LIDL PLUS"
-    "Descuento XX%"
-    "Desc."
-    Cualquier línea indentada con un valor NEGATIVO justo después de un producto
+Patrones que identifican una línea de descuento (NO es un producto):
+  • Texto que contiene "PROMO", "Descuento", "Desc.", "DTO.", "Oferta", "Promoción"
+    seguido de un valor negativo
+  • Cualquier línea con valor NEGATIVO indentada justo después de un producto
+  • Nombres de programas de fidelidad de cualquier cadena:
+      "PROMO LIDL PLUS", "Club Carrefour", "Descuento Dia Card",
+      "Ahorro Eroski", "Tarjeta Alcampo", o similar
 
-Procesamiento OBLIGATORIO:
+Procesamiento OBLIGATORIO (aplica a CUALQUIER supermercado):
   1. NO crees ningún producto con estos nombres.
   2. El valor absoluto (sin signo) es el campo "discount" del producto INMEDIATAMENTE ANTERIOR.
   3. Si hay VARIAS líneas de descuento consecutivas para el mismo producto → SÚMALAS.
   4. final_unit_price = original_unit_price − discount  (para productos por unidad)
      Para productos por peso → ver Regla 4.
-  5. Las líneas de resumen al pie del ticket son INFORMATIVAS → ignóralas como productos:
+  5. Las líneas de resumen al pie del ticket son INFORMATIVAS → ignóralas:
        "Total oferta Lidl Plus: X EUR"
        "Desc. total en compra: X EUR"
-  6. Los cupones al final del ticket también son INFORMATIVOS → ignóralos:
+       "Ahorro total: X EUR"
+       Cualquier línea de totales de descuento al final del ticket
+  6. Los cupones para futuras compras también son INFORMATIVOS → ignóralos:
        "Cupones canjeados: -3€ para tu próxima compra"
        "-15% Nueces sin cáscara"
 
-Ejemplos reales extraídos de tickets Lidl:
+Ejemplos reales (tickets Lidl):
 
   Ticket muestra:
     BANANA (0,772 kg x 1,49 EUR/kg)   1,15
@@ -193,15 +216,21 @@ Si NO hay descuento:
   final_unit_price   = original_unit_price
 
 ════════════════════════════════════════════════════════════
-REGLA 5 — CANTIDAD Y PRECIO UNITARIO EN MERCADONA
+REGLA 5 — CANTIDAD Y PRECIO UNITARIO (MÚLTIPLES UNIDADES)
 ════════════════════════════════════════════════════════════
-En Mercadona, cuando se compra más de una unidad de un mismo producto,
-el ticket muestra: CANTIDAD  NOMBRE  P.UNIT  IMPORTE_TOTAL
-  Ejemplo: "2 ARROZ CAMPESTRE  2,00  4,00"
-    → quantity=2, unit="unidad", original_unit_price=2.00, line_total=4.00
+Cuando se compran varias unidades del mismo producto, muchos supermercados
+muestran la cantidad al inicio de la línea seguida del precio unitario y el total:
+  Formato habitual: CANTIDAD  NOMBRE  P.UNIT  IMPORTE_TOTAL
 
-  Ejemplo: "2 Q. UNTAR SUAVE  1,40  2,80"
-    → quantity=2, unit="unidad", original_unit_price=1.40, line_total=2.80
+  Ejemplos (Mercadona):
+    "2 ARROZ CAMPESTRE  2,00  4,00"   → quantity=2, original_unit_price=2.00, line_total=4.00
+    "2 Q. UNTAR SUAVE   1,40  2,80"  → quantity=2, original_unit_price=1.40, line_total=2.80
+
+  Otros formatos equivalentes que pueden aparecer en cualquier supermercado:
+    "3 x 1,50"      → quantity=3, original_unit_price=1.50, line_total=4.50
+    "NOMBRE  x3  1,50  4,50"  → ídem
+
+En todos los casos: original_unit_price es el precio POR UNIDAD, no el total.
 
 ════════════════════════════════════════════════════════════
 REGLA 6 — CATEGORÍAS FIJAS
@@ -235,34 +264,54 @@ Guía de categorías para productos frecuentes:
 ════════════════════════════════════════════════════════════
 REGLA 7 — MARCA (BRAND)
 ════════════════════════════════════════════════════════════
-Orden de decisión:
+Orden de decisión (aplica en este orden estricto):
 
 CASO A — Marca de fabricante visible en el ticket:
-  Si el ticket menciona una marca reconocible (Coca-Cola, Danone, Colgate...) → úsala.
+  Si el ticket menciona una marca comercial reconocible (Coca-Cola, Danone,
+  Colgate, Pascual, Nestlé, Kellogg's, Heinz, Fairy, Ariel...) → úsala en
+  "brand" y elimínala del campo "name".
 
 CASO B — Producto ENVASADO/MANUFACTURADO sin marca de fabricante:
-  Asigna la marca blanca del supermercado:
+
+  ── CAPA 1: supermercados conocidos ──
     Mercadona:
-      alimentación general          → "Hacendado"
-      higiene y cosmética           → "Deliplus"
-      limpieza del hogar            → "Bosque Verde"
-    Carrefour                       → "Carrefour"
-    Alcampo                         → "Auchan"
-    Eroski                          → "Eroski"
+      alimentación general   → "Hacendado"
+      higiene y cosmética    → "Deliplus"
+      limpieza del hogar     → "Bosque Verde"
     Dia:
-      higiene/cosmética             → "Imaqe"  (marca propia de Dia)
-      alimentación general          → "Dia"
-    Lidl: usa la sub-marca si la reconoces con seguridad (Milbona, Pilos, Vitasia, Cien...);
-          si no → "Lidl"
-    Aldi: ídem con sus sub-marcas; si no → "Aldi"
+      higiene y cosmética    → "Imaqe"
+      alimentación general   → "Dia"
+    Lidl: usa la sub-marca si la reconoces con seguridad:
+      lácteos                → "Milbona"
+      detergentes            → "Pilos"
+      comida asiática        → "Vitasia"
+      cosmética/higiene      → "Cien"
+      si no la identificas   → "Lidl"
+    Aldi: ídem con sus sub-marcas; si no la identificas → "Aldi"
+    Carrefour                → "Carrefour"
+    Alcampo                  → "Auchan"
+    Eroski                   → "Eroski"
+    Consum                   → "Consum"
+    Caprabo                  → "Caprabo"
+    El Corte Inglés          → "El Corte Inglés"
+    Simply                   → "Simply"
+
+  ── CAPA 2: supermercado no listado ──
+    Si el supermercado no aparece en la tabla anterior pero el producto
+    es claramente envasado/manufacturado y de marca blanca:
+    → usa el nombre comercial del supermercado como brand.
+    Ejemplo: supermercado "Supersol", producto envasado sin marca visible
+    → brand = "Supersol"
+    Si no puedes determinar con confianza si es marca blanca → brand = null.
 
 CASO C — Producto fresco a granel (fruta, verdura, carne, pescado, charcutería suelta):
-  → "brand": null  (salvo que el ticket indique explícitamente una marca)
+  → "brand": null  (salvo que el ticket indique explícitamente una marca,
+    p.ej. "Jamón Serrano Navidul" o "Pollo Coren")
 
 En caso de duda razonable → null antes que inventar.
 
-Productos con código de artículo en el nombre (frecuente en Lidl bazar):
-  "ESPUMADOR-0508364" → name="Espumador de leche", brand="Lidl" (es producto de bazar Lidl)
+Productos con código de artículo en el nombre (frecuente en Lidl y Aldi bazar):
+  "ESPUMADOR-0508364" → name="Espumador de leche", brand="Lidl"
   "FLOOPY ZEBRA"      → name="Peluche cebra Floopy", brand="Lidl", category="Otros"
   Elimina siempre el código numérico del campo "name".
 
