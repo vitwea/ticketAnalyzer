@@ -7,11 +7,8 @@ class Category(Base):
     __tablename__ = "category"
 
     id_category = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
-    parent_category_id = Column(Integer, ForeignKey("category.id_category"), nullable=True)
+    name = Column(String, nullable=False, unique=True)
 
-    children = relationship("Category", back_populates="parent", remote_side=[id_category])
-    parent = relationship("Category", back_populates="children", remote_side=[parent_category_id])
     products = relationship("Product", back_populates="category")
 
 
@@ -19,7 +16,7 @@ class Brand(Base):
     __tablename__ = "brand"
 
     id_brand = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)
+    name = Column(String, nullable=False, unique=True)
 
     products = relationship("Product", back_populates="brand")
 
