@@ -16,6 +16,7 @@ from src.db.insert import (
     insert_source,
     insert_product_alias,
     insert_brand,
+    receipt_exists,
 )
 from src.config.logger import get_logger
 
@@ -164,8 +165,8 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
 
 def run_pipeline(query: str = (
     'from:mercadona '
-    'OR from:(dia.es) '
     'OR subject:(lidl ticket) '
+    'OR from:(dia) '
     'OR subject:(alcampo ticket)'
 )) -> List[int]:
     logger.info(f"Running pipeline with query: {query}")
@@ -177,6 +178,11 @@ def run_pipeline(query: str = (
 
     for msg in msgs:
         msg_id = msg["id"]
+
+        if receipt_exists(msg_id):
+            logger.info(f"Skipping Gmail message {msg_id} — already in database.")
+            continue
+
         logger.info(f"Processing Gmail message {msg_id}")
 
         try:
