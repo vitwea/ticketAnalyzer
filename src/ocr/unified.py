@@ -5,25 +5,13 @@ from google import genai
 from google.genai import types
 from src.config.settings import settings
 from src.config.logger import get_logger
+from src.ocr.examples import build_examples_block
 
 logger = get_logger(__name__)
 
 client = genai.Client(api_key=settings.anthropic_api_key)
 
-
-def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
-    """
-    Extract structured ticket data from a PDF or image using Gemini 2.5 Flash.
-    Returns a dict with supermarket, date, products, totals, etc.
-    """
-
-    logger.info(f"Sending {mime_type} ({len(file_bytes)} bytes) to Gemini 2.5 Flash OCR...")
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=[
-            types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
-            types.Part.from_text(text="""
+_PROMPT = """
 Eres un sistema experto en lectura de tickets de supermercado españoles.
 
 Tu tarea es analizar el ticket y devolver un JSON ESTRICTO con esta estructura:
@@ -235,31 +223,106 @@ En todos los casos: original_unit_price es el precio POR UNIDAD, no el total.
 ════════════════════════════════════════════════════════════
 REGLA 6 — CATEGORÍAS FIJAS
 ════════════════════════════════════════════════════════════
-Elige EXACTAMENTE UNA:
-  Lácteos · Carnes · Pescados · Frutas · Verduras · Panadería · Bebidas
-  Droguería · Higiene · Congelados · Snacks · Huevos · Cereales y pasta
-  Salsas y conservas · Otros
+Elige EXACTAMENTE UNA de estas categorías:
+  Lácteos · Carnes · Pescados · Frutas · Verduras · Panadería y pastelería
+  Bebidas · Droguería · Higiene · Congelados · Snacks · Huevos
+  Cereales y pasta · Salsas y conservas · Platos preparados
+  Especias y condimentos · Otros
 
-Guía de categorías para productos frecuentes:
-  Bolsa de plástico / bolsa de tela           → Otros
-  Papel higiénico / papel de cocina           → Higiene
-  Papel vegetal / film / papel de horno       → Droguería
-  Tortilla de patata (precocinada)            → Otros
-  Delicias de pollo / nuggets / rebozados     → Carnes
-  Frutos secos (nueces, almendras...)         → Snacks
-  Hummus                                      → Salsas y conservas
-  Gyozas / dumpling                           → Congelados
-  Artículos de bazar / no-alimentación        → Otros
-  Fideos de cristal / pasta                   → Cereales y pasta
-  Crema de cacahuete                          → Salsas y conservas
-  Chocolate                                   → Snacks
-  Frutos rojos congelados                     → Congelados
-  Yogur griego                                → Lácteos
-  Desodorante / higiene personal              → Higiene
-  Gambas / mariscos                           → Pescados
-  Mantequilla                                 → Lácteos
-  Queso                                       → Lácteos
-  Nata                                        → Lácteos
+DEFINICIÓN DE CADA CATEGORÍA (úsala para inferir aunque el ticket no lo diga):
+
+  Lácteos
+    Leche, yogur (cualquier tipo), queso, mantequilla, nata, kéfir,
+    bebida vegetal (avena, soja, almendra...), postres lácteos.
+
+  Carnes
+    Carne fresca o envasada: pollo, cerdo, ternera, cordero, pavo.
+    También: delicias de pollo, nuggets, croquetas, rebozados cárnicos,
+    jamón cocido, salchichas, chorizo, salchichón, fuet, lomo embuchado,
+    bacon / panceta.
+
+  Pescados
+    Pescado fresco o envasado, marisco, gambas, mejillones, atún en lata,
+    sardinas en lata, salmón ahumado, palitos de cangrejo / surimi.
+
+  Frutas
+    Fruta fresca o en bolsa: manzana, naranja, plátano, uva, pera,
+    fresas, melón, sandía, kiwi, mandarina, limón, aguacate, mango.
+
+  Verduras
+    Verdura y hortaliza fresca o envasada: tomate, lechuga, cebolla,
+    patata, zanahoria, pimiento, calabacín, berenjena, brócoli, espinacas,
+    ajo (fresco o en cabeza), ensalada en bolsa, mezcla de verduras,
+    canónigos, rúcula.
+
+  Panadería y pastelería
+    Pan (barra, molde, integral, pita, tortitas de maíz/arroz),
+    bollería y pastelería lista para consumir o calentar:
+      berlinas / donuts / palmeras / croissants / napolitanas,
+      magdalenas, bizcochos, galletas, rosquillas,
+      hojaldres rellenos listos para consumir (bacon-queso, jamón-queso,
+      mini-pizzas, empanadillas de hojaldre),
+      "CACAO CRUNCH" (berlina de cacao de Mercadona),
+      "BACON X% QUESO X%" (hojaldre relleno listo para comer).
+
+  Bebidas
+    Agua, refrescos, zumos, cerveza, vino, cava, sidra, café, té,
+    bebidas energéticas, batidos.
+
+  Droguería
+    Productos de limpieza del hogar: detergente, suavizante, lavavajillas,
+    limpiadores multiusos, fregasuelos, ambientadores,
+    papel de cocina, papel vegetal, film transparente, papel de aluminio,
+    bolsas de basura, esponjas, estropajos.
+
+  Higiene
+    Higiene personal: papel higiénico, gel de ducha, champú, acondicionador,
+    dentífrico, cepillo de dientes, desodorante, maquinillas de afeitar,
+    compresas, tampones, pañales, colonia.
+
+  Congelados
+    Cualquier producto congelado: verduras congeladas, fruta congelada,
+    pizza congelada, gyozas / dumplings, fish & chips,
+    helados, polos, frutos rojos congelados, carne congelada.
+
+  Snacks
+    Aperitivos y picoteo: patatas fritas, palomitas, frutos secos
+    (nueces, almendras, cacahuetes, pistachos), pipas, aceitunas,
+    gusanitos, nachos, chocolate, barritas de cereales, regaliz.
+
+  Huevos
+    Huevos frescos (cualquier formato o tamaño de pack).
+
+  Cereales y pasta
+    Arroz, pasta (macarrones, espaguetis, fideos), cereales de desayuno,
+    copos de avena, fideos de cristal, cuscús, quinoa.
+
+  Salsas y conservas
+    Tomate frito / triturado, salsas (ketchup, mayonesa, mostaza, pesto),
+    hummus, crema de cacahuete / de frutos secos, conservas vegetales
+    (garbanzos, lentejas, judías en bote), aceite, vinagre, mermelada,
+    miel, cacao en polvo (Colacao, Nesquik).
+
+  Platos preparados
+    Comida lista para consumir o calentar que no encaja en Panadería:
+      tortilla de patata (envasada o de charcutería), ensaladilla rusa,
+      gazpacho / salmorejo, croquetas (sin rebozar como nugget),
+      lasaña / canelones listos, pasta preparada, arroz preparado,
+      sopa preparada, potaje / cocido preparado, paella preparada,
+      wok de verduras preparado, sushi / makis.
+    Criterio general: si es un plato cocinado listo para comer (solo hay
+    que calentarlo o ya está frío listo), es "Platos preparados".
+
+  Especias y condimentos
+    Especias secas y frescas: ajo en polvo, pimentón, comino, orégano,
+    tomillo, romero, curry, cúrcuma, canela, pimienta, sal (todo tipo),
+    caldo en pastilla / brick, levadura, vinagre de módena.
+    NO incluye salsas líquidas (esas van en Salsas y conservas).
+
+  Otros
+    Bolsa de plástico / bolsa reutilizable, artículos de bazar,
+    productos de papelería, pilas, artículos de temporada,
+    cualquier producto que no encaje en las categorías anteriores.
 
 ════════════════════════════════════════════════════════════
 REGLA 7 — MARCA (BRAND)
@@ -371,28 +434,59 @@ REGLA 12 — SALIDA JSON
   - Devuelve SIEMPRE un JSON válido.
   - Sin texto adicional, sin explicaciones, sin bloques de código markdown.
   - Usa punto (.) como separador decimal, nunca coma.
-"""),
-        ],
+"""
 
-        generation_config={
-            "response_mime_type": "application/json"
-        }
+
+def _call_gemini(file_bytes: bytes, mime_type: str):
+    """Single Gemini API call."""
+    prompt = _PROMPT + build_examples_block()
+    return client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
+            types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
+            types.Part.from_text(text=prompt),
+        ],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+        ),
     )
 
-    raw = response.text.strip()
 
-    # Strip markdown fences if Gemini wraps in ```json ... ```
+def _parse_response(response) -> dict:
+    """Strip markdown fences and parse JSON from a Gemini response."""
+    raw = response.text.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
         raw = raw.strip()
+    return json.loads(raw)
 
+
+def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
+    """
+    Extract structured ticket data from a PDF or image using Gemini 2.5 Flash.
+    Retries once automatically if Gemini returns malformed JSON.
+    """
+    logger.info(f"Sending {mime_type} ({len(file_bytes)} bytes) to Gemini 2.5 Flash OCR...")
+
+    response = _call_gemini(file_bytes, mime_type)
+
+    # Attempt 1
     try:
-        data = json.loads(raw)
-        logger.info("Gemini 2.5 Flash OCR extraction successful.")
+        data = _parse_response(response)
+        logger.info("Gemini OCR extraction successful.")
+        return data
+    except json.JSONDecodeError as e:
+        logger.warning(f"Gemini returned malformed JSON (attempt 1): {e} — retrying...")
+
+    # Attempt 2
+    try:
+        response = _call_gemini(file_bytes, mime_type)
+        data = _parse_response(response)
+        logger.info("Gemini OCR extraction successful on retry.")
         return data
     except Exception as e:
-        logger.error(f"Error parsing Gemini JSON: {e}")
-        logger.error(f"Raw response: {raw}")
+        logger.error(f"Gemini returned malformed JSON after retry: {e}")
+        logger.error(f"Raw response: {response.text.strip()}")
         raise
