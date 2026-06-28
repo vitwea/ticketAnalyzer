@@ -1,0 +1,427 @@
+{
+  "_comment": "Few-shot examples for OCR prompt. Each entry is a real product seen in a Spanish supermarket ticket that could be misclassified without explicit context. Add new entries as edge cases are discovered.",
+  "examples": [
+    {
+      "supermarket": "Mercadona",
+      "original_name": "BACON 45% QUESO 30%",
+      "name": "Hojaldre relleno de bacon y queso",
+      "category": "Panadería y pastelería",
+      "brand": "Hacendado",
+      "note": "Aunque menciona bacon y queso, es un hojaldre de bollería listo para consumir, no un producto cárnico"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "CACAO CRUNCH",
+      "name": "Berlina de cacao",
+      "category": "Panadería y pastelería",
+      "brand": "Hacendado",
+      "note": "Es una berlina (donut relleno de crema de cacao), no un cereal ni un snack"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "TORTILLA PAT C/CEB",
+      "name": "Tortilla de patata con cebolla",
+      "category": "Platos preparados",
+      "brand": "Hacendado",
+      "note": "Tortilla envasada lista para consumir, no es una verdura ni un huevo"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "ENSALADILLA RUSA",
+      "name": "Ensaladilla rusa",
+      "category": "Platos preparados",
+      "brand": "Hacendado",
+      "note": "Plato preparado de charcutería, no es una verdura"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "GAZPACHO",
+      "name": "Gazpacho",
+      "category": "Platos preparados",
+      "brand": "Hacendado",
+      "note": "Bebida/plato preparado, no es una verdura aunque lleve tomate"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "CROQUETAS JAMON",
+      "name": "Croquetas de jamón",
+      "category": "Platos preparados",
+      "brand": "Hacendado",
+      "note": "Plato preparado refrigerado, no es carne ni congelado"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "DELICIAS DE POLLO",
+      "name": "Delicias de pollo",
+      "category": "Carnes",
+      "brand": "Hacendado",
+      "note": "Rebozado cárnico precocinado, categoría Carnes (no Platos preparados)"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "24 HUEVOS FRESCOS",
+      "name": "Huevos frescos (pack 24 uds)",
+      "category": "Huevos",
+      "brand": "Hacendado",
+      "note": "Pack de huevos, categoría Huevos"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "HIGIENICO DOBLE ROLL",
+      "name": "Papel higiénico doble rollo",
+      "category": "Higiene",
+      "brand": "Hacendado",
+      "note": "Papel higiénico, categoría Higiene (no Droguería)"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "PAPEL VEGETAL 30H",
+      "name": "Papel vegetal (30 hojas)",
+      "category": "Droguería",
+      "brand": "Hacendado",
+      "note": "Papel de cocina para horno, categoría Droguería (no Higiene)"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "DUO CANONIGOS RUCULA",
+      "name": "Ensalada de canónigos y rúcula",
+      "category": "Verduras",
+      "brand": "Hacendado",
+      "note": "Bolsa de ensalada fresca, categoría Verduras"
+    },
+    {
+      "supermarket": "Mercadona",
+      "original_name": "COSTILLA CARNOSA",
+      "name": "Costilla de cerdo carnosa",
+      "category": "Carnes",
+      "brand": null,
+      "note": "Carne fresca a granel, brand null"
+    },
+    {
+      "supermarket": "Lidl",
+      "original_name": "ESPUMADOR-0508364",
+      "name": "Espumador de leche",
+      "category": "Otros",
+      "brand": "Lidl",
+      "note": "Artículo de bazar Lidl con código numérico — eliminar el código del name"
+    },
+    {
+      "supermarket": "Lidl",
+      "original_name": "FLOOPY ZEBRA",
+      "name": "Peluche cebra Floopy",
+      "category": "Otros",
+      "brand": "Lidl",
+      "note": "Artículo de bazar no alimentario"
+    },
+    {
+      "supermarket": "Lidl",
+      "original_name": "GRIEGO NATURAL",
+      "name": "Yogur griego natural",
+      "category": "Lácteos",
+      "brand": "Milbona",
+      "note": "Yogur de marca blanca Lidl (Milbona = lácteos Lidl)"
+    },
+    {
+      "supermarket": "Lidl",
+      "original_name": "GYOZAS DE VERDURAS",
+      "name": "Gyozas de verduras",
+      "category": "Congelados",
+      "brand": "Lidl",
+      "note": "Producto congelado asiático, no es Platos preparados ni Verduras"
+    },
+    {
+      "supermarket": "Lidl",
+      "original_name": "FIDEOS DE CRISTAL",
+      "name": "Fideos de cristal",
+      "category": "Cereales y pasta",
+      "brand": "Lidl",
+      "note": "Pasta oriental, no es un congelado ni un plato preparado"
+    },
+    {
+      "supermarket": "Dia",
+      "original_name": "DEO PIES POLVO IMAQE",
+      "name": "Desodorante de pies en polvo",
+      "category": "Higiene",
+      "brand": "Imaqe",
+      "note": "Imaqe es la marca de higiene/cosmética propia de Dia"
+    },
+    {
+      "supermarket": "Dia",
+      "original_name": "CREMA CACAHUETE 100%",
+      "name": "Crema de cacahuete 100%",
+      "category": "Salsas y conservas",
+      "brand": "Dia",
+      "note": "Crema de frutos secos, no es un snack"
+    },
+    {
+      "supermarket": "Dia",
+      "original_name": "CHOCO NEGRO 70% S.AZ",
+      "name": "Chocolate negro 70% sin azúcar",
+      "category": "Snacks",
+      "brand": "Dia",
+      "note": "S.AZ = sin azúcar; chocolate → Snacks"
+    },
+    {
+      "supermarket": "Dia",
+      "original_name": "FRUTOS ROJOS CONGELA",
+      "name": "Frutos rojos congelados",
+      "category": "Congelados",
+      "brand": "Dia",
+      "note": "CONGELA = congelado/a; aunque sea fruta, al ser congelado → Congelados"
+    },
+    {
+      "supermarket": "Dia",
+      "original_name": "YOGUR GRIEGO NTRAL",
+      "name": "Yogur griego natural",
+      "category": "Lácteos",
+      "brand": "Dia",
+      "note": "NTRAL = natural"
+    },
+    {
+      "original_name": "1 CAPRICHOS CAMEMBERT",
+      "name": "Caprichos Camembert",
+      "category": "Congelados",
+      "brand": null,
+      "note": "manually corrected"
+    },
+    {
+      "original_name": "1 DELICIAS DE POLLO",
+      "name": "Delicias de pollo",
+      "category": "Congelados",
+      "brand": null,
+      "note": "manually corrected"
+    },
+    {
+      "original_name": "1 DOBLE BURGER",
+      "name": "Doble Burger",
+      "category": "Platos preparados",
+      "brand": null,
+      "note": "manually corrected"
+    },
+    {
+      "original_name": "TRÍO DE HUMMUS",
+      "name": "Trío de hummus",
+      "category": "Platos preparados",
+      "brand": null,
+      "note": "manually corrected"
+    },
+    {
+      "original_name": "CREMAS DE HORTALIZAS",
+      "name": "Crema de hortalizas",
+      "category": "Platos preparados",
+      "brand": null,
+      "note": "manually corrected"
+    },
+    {
+      "original_name": "1 BASE PIZZA EXTRAFINA",
+      "name": "Base de pizza extrafina",
+      "category": "Panadería y pastelería",
+      "brand": null,
+      "note": "manually corrected"
+    },
+    {
+      "original_name": "1 PIZZA F.CARBONARA",
+      "name": "Pizza carbonara",
+      "category": "Congelados",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 BARRA DE PAN",
+      "name": "Barra de pan",
+      "category": "Panadería y pastelería",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 TAPONES OÍDOS ESPUMA",
+      "name": "Tapones de oídos de espuma",
+      "category": "Otros",
+      "brand": "Deliplus"
+    },
+    {
+      "original_name": "1 TORTILLA PAT C/CEB",
+      "name": "Tortilla de patata con cebolla",
+      "category": "Platos preparados",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 LECHE ENTERA",
+      "name": "Leche entera",
+      "category": "Lácteos",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "BACON 11% QUESO 32%",
+      "name": "Hojaldre relleno de bacon y queso",
+      "category": "Panadería y pastelería",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "CIRUELA ROJA",
+      "name": "Ciruela roja",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "1 GAZPACHO FRESCO",
+      "name": "Gazpacho fresco",
+      "category": "Platos preparados",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 ENSALADILLA RUSA",
+      "name": "Ensaladilla rusa",
+      "category": "Platos preparados",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "NECTARINA",
+      "name": "Nectarina",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "TORTILLA PATATAS",
+      "name": "Tortilla de patatas",
+      "category": "Platos preparados",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "GYOZA JAPONESA",
+      "name": "Gyozas japonesa",
+      "category": "Congelados",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "QUESO OVEJA VIEJO",
+      "name": "Queso de oveja viejo",
+      "category": "Lácteos",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "GILDAS DE ANCHOA",
+      "name": "Gildas de anchoa",
+      "category": "Salsas y conservas",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "HOJALDRE TOMATE",
+      "name": "Hojaldre de tomate",
+      "category": "Panadería y pastelería",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "STICK QUESO",
+      "name": "Stick de queso",
+      "category": "Panadería y pastelería",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "CROISS. R. CHOCO",
+      "name": "Croissant relleno de chocolate",
+      "category": "Panadería y pastelería",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "BANANA",
+      "name": "Plátano",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "GYOZAS DE POLLO",
+      "name": "Gyozas de pollo",
+      "category": "Congelados",
+      "brand": "Lidl"
+    },
+    {
+      "original_name": "1 BANANA",
+      "name": "Plátano",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "1 NECTARINA",
+      "name": "Nectarina",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "BARRA DE PAN",
+      "name": "Barra de pan",
+      "category": "Panadería y pastelería",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "SANDÍA PARTIDA B/S",
+      "name": "Sandía partida sin semillas",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "1 KÉFIR NATURAL 0%",
+      "name": "Kéfir natural 0%",
+      "category": "Lácteos",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 BANANA\n0,168 kg\n1,55 €/kg",
+      "name": "Plátano",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "1 TOM.FRITO EST.CASERO",
+      "name": "Tomate frito estilo casero",
+      "category": "Salsas y conservas",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 QUESO RALLADO PIZZA",
+      "name": "Queso rallado para pizza",
+      "category": "Lácteos",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 BURGER M POLLO 500GR",
+      "name": "Hamburguesa de pollo (500g)",
+      "category": "Carnes",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 AGUA FONTEBIL",
+      "name": "Agua Fontebil",
+      "category": "Bebidas",
+      "brand": "Fontebil"
+    },
+    {
+      "original_name": "1 BANANA\n0,186 kg\n1,55 €/kg",
+      "name": "Plátano",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "1 BANANA\n0,164 kg\n1,55 €/kg",
+      "name": "Plátano",
+      "category": "Frutas",
+      "brand": null
+    },
+    {
+      "original_name": "1 CEBOLLA DULCE",
+      "name": "Cebolla dulce",
+      "category": "Verduras",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 DUO CANONIGOS RUCULA",
+      "name": "Ensalada de canónigos y rúcula",
+      "category": "Verduras",
+      "brand": "Hacendado"
+    },
+    {
+      "original_name": "1 COSTILLA CARNOSA",
+      "name": "Costilla de cerdo carnosa",
+      "category": "Carnes",
+      "brand": null
+    }
+  ]
+}
