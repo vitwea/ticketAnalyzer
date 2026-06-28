@@ -9,6 +9,7 @@ from src.config.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 def receipt_exists(gmail_id: str) -> bool:
     """Return True if a receipt with this Gmail message ID already exists."""
     db = connection.SessionLocal()
@@ -79,7 +80,7 @@ def insert_store(supermarket_id: int, address: str, postal_code: str,
         db.close()
 
 
-def insert_category(name: str, parent_category_id: int = None) -> int:
+def insert_category(name: str) -> int:
     """Insert or retrieve a product category by name."""
     db = connection.SessionLocal()
     try:
@@ -87,7 +88,7 @@ def insert_category(name: str, parent_category_id: int = None) -> int:
         if category:
             return category.id_category
 
-        category = Category(name=name, parent_category_id=parent_category_id)
+        category = Category(name=name)
         db.add(category)
         db.commit()
         logger.debug(f"Inserted new category: {name} (id={category.id_category})")
@@ -165,9 +166,15 @@ def insert_product(normalized_name: str, id_category: int, id_brand: int = None)
 
 
 def insert_product_alias(original_name: str, id_product: int) -> int:
-    """Insert a product alias."""
+    """Insert a product alias if it doesn't already exist."""
     db = connection.SessionLocal()
     try:
+        alias = db.query(ProductAlias).filter_by(
+            original_name=original_name, id_product=id_product
+        ).first()
+        if alias:
+            return alias.id_alias
+
         alias = ProductAlias(original_name=original_name, id_product=id_product)
         db.add(alias)
         db.commit()
@@ -268,7 +275,7 @@ def insert_receipt_line(id_receipt: int, id_product: int, quantity: float,
 
 
 def insert_price_history(id_product: int, id_supermarket: int,
-                        price_date: date, price: float) -> int:
+                         price_date: date, price: float) -> int:
     """Insert a price history record."""
     db = connection.SessionLocal()
     try:
