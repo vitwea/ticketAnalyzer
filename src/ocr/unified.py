@@ -225,103 +225,156 @@ REGLA 6 — CATEGORÍAS FIJAS
 ════════════════════════════════════════════════════════════
 Elige EXACTAMENTE UNA de estas categorías:
   Lácteos · Carnes · Pescados · Frutas · Verduras · Panadería y pastelería
-  Bebidas · Droguería · Higiene · Congelados · Snacks · Huevos
-  Cereales y pasta · Salsas y conservas · Platos preparados
-  Especias y condimentos · Otros
+  Bebidas · Café e infusiones · Droguería · Higiene · Congelados · Snacks
+  Dulces y repostería · Huevos · Cereales y pasta · Legumbres
+  Aceites y grasas · Salsas y conservas · Platos preparados
+  Especias y condimentos · Parafarmacia · Mascotas · Otros
 
 DEFINICIÓN DE CADA CATEGORÍA (úsala para inferir aunque el ticket no lo diga):
 
   Lácteos
-    Leche, yogur (cualquier tipo), queso, mantequilla, nata, kéfir,
-    bebida vegetal (avena, soja, almendra...), postres lácteos.
+    Leche (vaca, cabra...), yogur (cualquier tipo), queso, mantequilla,
+    nata, kéfir, postres lácteos (natillas, flan, arroz con leche).
+    OJO: bebidas vegetales (avena, soja, almendra) → Bebidas, NO Lácteos.
 
   Carnes
-    Carne fresca o envasada: pollo, cerdo, ternera, cordero, pavo.
-    También: delicias de pollo, nuggets, croquetas, rebozados cárnicos,
-    jamón cocido, salchichas, chorizo, salchichón, fuet, lomo embuchado,
-    bacon / panceta.
+    Carne fresca o envasada: pollo, cerdo, ternera, cordero, pavo, conejo.
+    Embutidos y charcutería: jamón cocido, jamón serrano, salchichas,
+    chorizo, salchichón, fuet, lomo embuchado, bacon / panceta, mortadela.
+    Precocinados cárnicos: delicias de pollo, nuggets, rebozados cárnicos.
 
   Pescados
-    Pescado fresco o envasado, marisco, gambas, mejillones, atún en lata,
-    sardinas en lata, salmón ahumado, palitos de cangrejo / surimi.
+    Pescado fresco o envasado, marisco, gambas, mejillones, berberechos,
+    atún en lata, sardinas en lata, caballa en lata, salmón ahumado,
+    palitos de cangrejo / surimi, boquerones en vinagre.
 
   Frutas
     Fruta fresca o en bolsa: manzana, naranja, plátano, uva, pera,
-    fresas, melón, sandía, kiwi, mandarina, limón, aguacate, mango.
+    fresas, melón, sandía, kiwi, mandarina, limón, aguacate, mango,
+    piña, melocotón, ciruela, cereza.
 
   Verduras
     Verdura y hortaliza fresca o envasada: tomate, lechuga, cebolla,
-    patata, zanahoria, pimiento, calabacín, berenjena, brócoli, espinacas,
-    ajo (fresco o en cabeza), ensalada en bolsa, mezcla de verduras,
-    canónigos, rúcula.
+    patata, zanahoria, pimiento, calabacín, berenjena, brócoli, coliflor,
+    espinacas, ajo (fresco o en cabeza), puerro, espárragos,
+    ensalada en bolsa, mezcla de verduras, canónigos, rúcula.
 
   Panadería y pastelería
-    Pan (barra, molde, integral, pita, tortitas de maíz/arroz),
-    bollería y pastelería lista para consumir o calentar:
+    Pan fresco o envasado: barra, molde, integral, pita, tortitas de
+    maíz / arroz, pan de molde, regañás, picos.
+    Bollería y pastelería lista para consumir:
       berlinas / donuts / palmeras / croissants / napolitanas,
-      magdalenas, bizcochos, galletas, rosquillas,
+      magdalenas, bizcochos, galletas, rosquillas, sobaos,
       hojaldres rellenos listos para consumir (bacon-queso, jamón-queso,
       mini-pizzas, empanadillas de hojaldre),
       "CACAO CRUNCH" (berlina de cacao de Mercadona),
       "BACON X% QUESO X%" (hojaldre relleno listo para comer).
 
   Bebidas
-    Agua, refrescos, zumos, cerveza, vino, cava, sidra, café, té,
-    bebidas energéticas, batidos.
+    Agua (con o sin gas), refrescos (cola, naranja, limón...),
+    zumos y néctares, cerveza, vino, cava, sidra, bebidas energéticas,
+    batidos, bebidas vegetales (avena, soja, almendra, arroz).
+    OJO: café e infusiones tienen su propia categoría.
+
+  Café e infusiones
+    Café (grano, molido, cápsulas, soluble), té (cualquier variedad),
+    manzanilla, tila, poleo, infusiones de hierbas, rooibos,
+    achicoria, cebada soluble.
 
   Droguería
-    Productos de limpieza del hogar: detergente, suavizante, lavavajillas,
-    limpiadores multiusos, fregasuelos, ambientadores,
+    Limpieza del hogar: detergente (ropa, lavavajillas), suavizante,
+    limpiadores multiusos, fregasuelos, quitagrasas, lejía, ambientadores,
     papel de cocina, papel vegetal, film transparente, papel de aluminio,
-    bolsas de basura, esponjas, estropajos.
+    bolsas de basura, esponjas, estropajos, bayetas, guantes de limpieza.
 
   Higiene
-    Higiene personal: papel higiénico, gel de ducha, champú, acondicionador,
-    dentífrico, cepillo de dientes, desodorante, maquinillas de afeitar,
-    compresas, tampones, pañales, colonia.
+    Higiene personal: papel higiénico, gel de ducha, champú,
+    acondicionador, dentífrico, cepillo de dientes, hilo dental,
+    desodorante, maquinillas de afeitar, espuma de afeitar,
+    compresas, tampones, pañales, toallitas húmedas, colonia,
+    crema corporal / facial, protector solar.
 
   Congelados
-    Cualquier producto congelado: verduras congeladas, fruta congelada,
-    pizza congelada, gyozas / dumplings, fish & chips,
-    helados, polos, frutos rojos congelados, carne congelada.
+    Cualquier producto congelado (el estado de conservación manda):
+    verduras congeladas, fruta congelada, pizza congelada,
+    gyozas / dumplings, fish & chips, croquetas congeladas,
+    helados, polos, frutos rojos congelados, carne congelada,
+    marisco congelado, patatas prefritas congeladas.
 
   Snacks
-    Aperitivos y picoteo: patatas fritas, palomitas, frutos secos
-    (nueces, almendras, cacahuetes, pistachos), pipas, aceitunas,
-    gusanitos, nachos, chocolate, barritas de cereales, regaliz.
+    Aperitivos y picoteo salado: patatas fritas, palomitas, gusanitos,
+    nachos, pipas, frutos secos (nueces, almendras, cacahuetes, pistachos),
+    aceitunas, anchoas en lata (aperitivo), barritas de cereales,
+    crackers / biscotes salados.
+
+  Dulces y repostería
+    Chocolate (tableta, onzas, bombones), cacao en polvo (Colacao, Nesquik),
+    caramelos, gominolas, regaliz, chicles, mermelada, miel,
+    crema de cacao / nocilla / nutella, azúcar (blanca, morena, glass),
+    edulcorantes (sacarina, stevia), siropes y toppings dulces.
+    OJO: bollería y galletas → Panadería y pastelería.
 
   Huevos
-    Huevos frescos (cualquier formato o tamaño de pack).
+    Huevos frescos (cualquier formato, tamaño o pack).
 
   Cereales y pasta
-    Arroz, pasta (macarrones, espaguetis, fideos), cereales de desayuno,
-    copos de avena, fideos de cristal, cuscús, quinoa.
+    Arroz (cualquier variedad), pasta (macarrones, espaguetis, fideos,
+    tallarines, lasaña seca), cereales de desayuno, copos de avena,
+    fideos de cristal, cuscús, quinoa, bulgur.
+
+  Legumbres
+    Legumbres secas o cocidas (en bote / brick):
+    garbanzos, lentejas, alubias / judías, habas, guisantes secos,
+    soja en grano, edamame envasado.
+
+  Aceites y grasas
+    Aceite de oliva (virgen, virgen extra, refinado), aceite de girasol,
+    aceite de coco, manteca de cerdo, ghee, margarina.
+    OJO: mantequilla → Lácteos.
 
   Salsas y conservas
-    Tomate frito / triturado, salsas (ketchup, mayonesa, mostaza, pesto),
-    hummus, crema de cacahuete / de frutos secos, conservas vegetales
-    (garbanzos, lentejas, judías en bote), aceite, vinagre, mermelada,
-    miel, cacao en polvo (Colacao, Nesquik).
+    Salsas: tomate frito / triturado, ketchup, mayonesa, mostaza,
+    pesto, salsa de soja, tabasco, salsa brava, alioli envasado.
+    Conservas vegetales: maíz en lata, pimiento en bote, espárragos en lata,
+    alcachofas en conserva, tomate natural en lata.
+    Pastas y cremas: hummus, crema de cacahuete, tahin, paté vegetal.
+    Encurtidos: pepinillos, cebolletas, aceitunas en bote.
+    OJO: legumbres en bote → Legumbres. Aceite → Aceites y grasas.
 
   Platos preparados
-    Comida lista para consumir o calentar que no encaja en Panadería:
+    Comida cocinada lista para consumir o solo calentar:
       tortilla de patata (envasada o de charcutería), ensaladilla rusa,
-      gazpacho / salmorejo, croquetas (sin rebozar como nugget),
-      lasaña / canelones listos, pasta preparada, arroz preparado,
-      sopa preparada, potaje / cocido preparado, paella preparada,
-      wok de verduras preparado, sushi / makis.
-    Criterio general: si es un plato cocinado listo para comer (solo hay
-    que calentarlo o ya está frío listo), es "Platos preparados".
+      gazpacho / salmorejo, lasaña / canelones listos, pasta preparada,
+      arroz preparado, sopa preparada, potaje / cocido preparado,
+      paella preparada, wok preparado, sushi / makis,
+      bocadillos y sándwiches envasados, ensaladas preparadas con proteína.
+    Criterio: si está cocinado y listo para comer (frío o calentando),
+    es "Platos preparados". No confundir con Panadería (bollería/pan).
 
   Especias y condimentos
-    Especias secas y frescas: ajo en polvo, pimentón, comino, orégano,
-    tomillo, romero, curry, cúrcuma, canela, pimienta, sal (todo tipo),
-    caldo en pastilla / brick, levadura, vinagre de módena.
-    NO incluye salsas líquidas (esas van en Salsas y conservas).
+    Especias secas: ajo en polvo, pimentón (dulce/picante), comino,
+    orégano, tomillo, romero, curry, cúrcuma, canela, pimienta, clavo,
+    nuez moscada, cúrcuma, jengibre en polvo, hierbas provenzales.
+    Sal: sal fina, sal gorda, sal marina, flor de sal.
+    Caldos: pastillas de caldo, caldo en brick, preparado para sofrito.
+    Levadura (química o fresca), bicarbonato, maicena.
+    Vinagres: vinagre de vino, vinagre de manzana, vinagre de módena.
+    OJO: salsas líquidas (ketchup, mostaza...) → Salsas y conservas.
+
+  Parafarmacia
+    Vitaminas y suplementos (vitamina C, D, omega-3, multivitamínico),
+    proteínas en polvo / barritas proteicas, colágeno, probióticos,
+    medicamentos sin receta (ibuprofeno, paracetamol, antiácidos),
+    tiritas, termómetros, tensiómetros, test de embarazo / ovulación.
+
+  Mascotas
+    Comida para perro o gato (seca, húmeda, snacks),
+    arena para gatos, accesorios para mascotas,
+    antiparasitarios, champú para mascotas.
 
   Otros
     Bolsa de plástico / bolsa reutilizable, artículos de bazar,
-    productos de papelería, pilas, artículos de temporada,
+    productos de papelería, pilas, bombillas, artículos de temporada,
     cualquier producto que no encaje en las categorías anteriores.
 
 ════════════════════════════════════════════════════════════
