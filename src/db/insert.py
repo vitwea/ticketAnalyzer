@@ -272,26 +272,3 @@ def insert_receipt_line(id_receipt: int, id_product: int, quantity: float,
         raise
     finally:
         db.close()
-
-
-def insert_price_history(id_product: int, id_supermarket: int,
-                         price_date: date, price: float) -> int:
-    """Insert a price history record."""
-    db = connection.SessionLocal()
-    try:
-        history = PriceHistory(
-            id_product=id_product,
-            id_supermarket=id_supermarket,
-            date=price_date,
-            price=price,
-        )
-        db.add(history)
-        db.commit()
-        logger.debug(f"Inserted price_history {history.id_history}")
-        return history.id_history
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error inserting price_history: {e}")
-        raise
-    finally:
-        db.close()

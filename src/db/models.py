@@ -33,7 +33,6 @@ class Product(Base):
     brand = relationship("Brand", back_populates="products")
     aliases = relationship("ProductAlias", back_populates="product")
     receipt_lines = relationship("ReceiptLine", back_populates="product")
-    price_history = relationship("PriceHistory", back_populates="product")
 
 
 class ProductAlias(Base):
@@ -53,7 +52,6 @@ class Supermarket(Base):
     name = Column(String, unique=True, nullable=False)
 
     stores = relationship("Store", back_populates="supermarket")
-    price_history = relationship("PriceHistory", back_populates="supermarket")
 
 
 class Store(Base):
@@ -112,14 +110,3 @@ class ReceiptLine(Base):
     product = relationship("Product", back_populates="receipt_lines")
 
 
-class PriceHistory(Base):
-    __tablename__ = "price_history"
-
-    id_history = Column(Integer, primary_key=True)
-    id_product = Column(Integer, ForeignKey("product.id_product"), nullable=False)
-    id_supermarket = Column(Integer, ForeignKey("supermarket.id_supermarket"), nullable=False)
-    date = Column(Date, nullable=False)
-    price = Column(Numeric, nullable=False)
-
-    product = relationship("Product", back_populates="price_history")
-    supermarket = relationship("Supermarket", back_populates="price_history")
