@@ -1,14 +1,15 @@
-# Core dependencies
-python-dotenv>=1.0.0
-google-auth>=2.28.0
-google-auth-oauthlib>=1.2.0
-google-api-python-client>=1.12.5
-google-genai>=0.3.0
-SQLAlchemy>=2.0.23
-psycopg2-binary>=2.9.9
-cryptography==49.0.0
-requests==2.34.2
+# ─────────────────────────────────────────────────────────────────────────────
+# This project uses pyproject.toml as the single source of truth for
+# dependencies. This file only exists for tooling/workflows that expect a
+# requirements.txt, and it simply delegates to pyproject.
+#
+#   Runtime only:      pip install .
+#   Runtime + dev:     pip install -e ".[dev]"
+#   Via this file:     pip install -r requirements.txt   (installs the [dev] extra)
+#
+# If you ever need a fully pinned lockfile for reproducible deploys, GENERATE it
+# instead of hand-editing:
+#   pip freeze > requirements.lock.txt
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Tests
-pytest>=7.4.3
-pytest-cov>=4.1.0
+-e .[dev]
