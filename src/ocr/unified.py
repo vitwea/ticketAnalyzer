@@ -11,11 +11,11 @@ logger = get_logger(__name__)
 
 client = genai.Client(api_key=settings.anthropic_api_key)
 
-_PROMPT = """
+_PROMPT = _PROMPT = """
 Eres un sistema experto en lectura de tickets de supermercado españoles.
+Devuelve SIEMPRE un JSON ESTRICTO, sin texto adicional ni bloques markdown.
 
-Tu tarea es analizar el ticket y devolver un JSON ESTRICTO con esta estructura:
-
+ESTRUCTURA DE SALIDA
 {
   "supermarket": "Mercadona",
   "date": "2026-06-15",
@@ -27,7 +27,7 @@ Tu tarea es analizar el ticket y devolver un JSON ESTRICTO con esta estructura:
     {
       "name": "Tomate pera",
       "original_name": "PLT TOM 1KG",
-      "category": "Verduras",
+      "category": "Verduras y hortalizas",
       "brand": null,
       "quantity": 1.25,
       "unit": "kg",
@@ -39,455 +39,235 @@ Tu tarea es analizar el ticket y devolver un JSON ESTRICTO con esta estructura:
   ]
 }
 
-════════════════════════════════════════════════════════════
-REGLA 1 — NOMBRE DEL SUPERMERCADO
-════════════════════════════════════════════════════════════
-El campo "supermarket" contiene ÚNICAMENTE el nombre comercial de la cadena,
-NUNCA la razón social legal ni el nombre de la franquicia.
+═══════════════════════════════════════════════════════════
+1. SUPERMARKET — nombre comercial, nunca razón social
+═══════════════════════════════════════════════════════════
+Conocidos (normaliza exacto, ignorando forma jurídica):
+  Mercadona · Lidl · Dia · Carrefour · Alcampo · Eroski · Aldi · Consum
+  Caprabo · Ahorramas · Condis · Gadis · El Corte Inglés (incluye Supercor)
+  Simply · Supersol (incluye Coaliment)
 
-── CAPA 1: supermercados conocidos (normalización exacta) ──
-  "MERCADONA, S.A." / "MERCADONA S.A."              → "Mercadona"
-  "LIDL SUPERMERCADOS S.A.U." / cualquier "LIDL…"  → "Lidl"
-  "DIA, S.A." y CUALQUIER franquicia de Dia         → "Dia"
-  "CARREFOUR …"                                     → "Carrefour"
-  "ALCAMPO …"                                       → "Alcampo"
-  "EROSKI …"                                        → "Eroski"
-  "ALDI …"                                          → "Aldi"
-  "CONSUM …"                                        → "Consum"
-  "CAPRABO …"                                       → "Caprabo"
-  "AHORRAMAS …"                                     → "Ahorramas"
-  "CONDIS …"                                        → "Condis"
-  "GADIS …"                                         → "Gadis"
-  "EL CORTE INGLÉS …" / "SUPERCOR …"               → "El Corte Inglés"
-  "SIMPLY …"                                        → "Simply"
-  "SUPERSOL …" / "COALIMENT …"                      → "Supersol"
+Desconocidos: elimina forma jurídica (S.A./S.L./S.A.U./S.COOP/C.B.) y NIF/CIF,
+usa formato título. Ej: "SUPERMERCADOS PACO GARCIA, S.L. B12345678" → "Supermercados Paco Garcia"
 
-── CAPA 2: supermercado desconocido (regla general) ──
-  Si la cabecera no coincide con ninguno de los anteriores:
-  1. Busca el nombre comercial en logos, textos destacados o cabecera del ticket.
-  2. Elimina la forma jurídica: S.A., S.L., S.A.U., S.C., S.L.U., S.COOP., C.B. y similares.
-  3. Elimina el NIF/CIF (letra + 8 dígitos) si aparece junto al nombre.
-  4. Usa el nombre resultante en formato título (primera letra mayúscula).
-     Ejemplo: "SUPERMERCADOS PACO GARCIA, S.L. B12345678" → "Supermercados Paco Garcia"
+Franquicias: si la cabecera muestra la razón social del franquiciado pero el
+ticket indica la cadena real ("Productos vendidos por X", "Total venta X",
+"REF.X:", logo visible) → usa esa cadena.
 
-── DETECCIÓN DE FRANQUICIAS ──
-  Algunos tickets muestran la razón social del franquiciado en cabecera pero
-  el nombre real de la cadena aparece en el cuerpo del ticket.
-  Señales que identifican la cadena real (aplica con cualquier supermercado):
-    • "Productos vendidos por X" → cadena = X
-    • "Total venta X"           → cadena = X
-    • "REF.X:" en datos de operación → cadena = X
-    • Logo o marca visible en el ticket digital
+═══════════════════════════════════════════════════════════
+2. STORE — formato "Dirección (CP, Ciudad)"
+═══════════════════════════════════════════════════════════
+Prioridad de fuente: 1) "Compra realizada en" / pie del ticket digital
+  2) cabecera  3) datos de operación al pie.
 
-════════════════════════════════════════════════════════════
-REGLA 2 — TIENDA (STORE)
-════════════════════════════════════════════════════════════
-Formato OBLIGATORIO: "Dirección (CP, Ciudad)"
-  Ejemplo: "Avda. Francisco de Goya, 61 (50005, Zaragoza)"
+Normaliza: MAYÚSCULAS → título. Expande CL→C/, AVDA→Avda., PZA→Pza., URB→Urb.
+Si hay intersección ("con C/...", "esquina..."), omítela.
+Si dirección y CP/ciudad están en zonas distintas del ticket, combínalas.
+Si no hay seguridad de dirección+CP+ciudad → null. No inventes.
 
-PRIORIDAD de fuentes (de mayor a menor):
-  1. Sección "Compra realizada en" / "Datos de la tienda" al final del ticket digital
-  2. Cabecera del ticket
-  3. Pie del ticket (datos de la operación)
+═══════════════════════════════════════════════════════════
+3. DESCUENTOS — líneas justo después de un producto
+═══════════════════════════════════════════════════════════
+Patrones de línea de descuento (NUNCA es un producto):
+  "PROMO", "Descuento", "Desc.", "DTO.", "Oferta" + valor negativo;
+  cualquier valor negativo indentado tras un producto;
+  fidelidad: "PROMO LIDL PLUS", "Club Carrefour", "Descuento Dia Card", etc.
 
-Normalización de la dirección:
-  - Convierte MAYÚSCULAS a formato título: "AVDA. FRANCISCO DE GOYA, 61" → "Avda. Francisco de Goya, 61"
-  - Expande abreviaturas: CL → C/, AVDA → Avda., PZA → Pza., URB → Urb., C.C. → C.C.
-  - Si la dirección incluye intersección ("con C/ …", "esq. …", "esquina …"), omite esa parte:
-      "C/ Vicente Berdusán, 44, con C/ Italia" → "C/ Vicente Berdusán, 44"
+Reglas:
+  - No crear producto con ese nombre.
+  - El valor absoluto es "discount" del producto inmediatamente anterior.
+  - Varias líneas de descuento consecutivas → súmalas.
+  - final_unit_price = original_unit_price − discount (unidades)
+                      = (line_total − discount) / quantity (peso variable)
+  - Ignora líneas-resumen al pie ("Total oferta Lidl Plus", "Ahorro total")
+    y cupones para compras futuras.
 
-Cuando dirección y CP/ciudad están en zonas distintas del ticket:
-  Algunos tickets (p.ej. Dia) muestran la calle en la cabecera y el CP+ciudad
-  en el pie (formato "CP:50005 Zaragoza" o "C.P.: 50005 - Zaragoza").
-  En ese caso combina ambas partes en el formato estándar.
-  Aplica esta lógica con CUALQUIER supermercado, no solo Dia.
+Ejemplo: "BANANA 0,772kg x 1,49€/kg  1,15" + "PROMO LIDL PLUS  -0,39"
+  → quantity=0.772, unit=kg, original_unit_price=1.49, discount=0.39,
+    final_unit_price=1.10, line_total=0.85
 
-Si NO puedes identificar dirección + CP + ciudad con seguridad → usa null. No inventes.
+═══════════════════════════════════════════════════════════
+4. PESO VARIABLE
+═══════════════════════════════════════════════════════════
+Formatos: "kg / €kg / total" en 1 o 2 líneas, en cualquier orden.
+  quantity = peso en kg · unit = "kg" · original_unit_price = precio/kg
+  line_total = importe final de la línea
+Con descuento: discount = importe descontado en la línea (no por kg);
+  final_unit_price = (line_total − discount) / quantity, redondeado a 2 decimales.
+Sin descuento: discount = 0.0, final_unit_price = original_unit_price.
 
-════════════════════════════════════════════════════════════
-REGLA 3 — DESCUENTOS DE FIDELIDAD Y PROMOCIONALES
-════════════════════════════════════════════════════════════
-En cualquier supermercado, los descuentos sobre un producto concreto aparecen
-como líneas secundarias INMEDIATAMENTE DESPUÉS del producto al que aplican.
+═══════════════════════════════════════════════════════════
+5. MÚLTIPLES UNIDADES
+═══════════════════════════════════════════════════════════
+"2 ARROZ CAMPESTRE 2,00 4,00" → quantity=2, original_unit_price=2.00 (por unidad), line_total=4.00
+"3 x 1,50" → quantity=3, original_unit_price=1.50, line_total=4.50
+original_unit_price es SIEMPRE por unidad, nunca el total.
 
-Patrones que identifican una línea de descuento (NO es un producto):
-  • Texto que contiene "PROMO", "Descuento", "Desc.", "DTO.", "Oferta", "Promoción"
-    seguido de un valor negativo
-  • Cualquier línea con valor NEGATIVO indentada justo después de un producto
-  • Nombres de programas de fidelidad de cualquier cadena:
-      "PROMO LIDL PLUS", "Club Carrefour", "Descuento Dia Card",
-      "Ahorro Eroski", "Tarjeta Alcampo", o similar
+═══════════════════════════════════════════════════════════
+6. CATEGORÍAS — elige EXACTAMENTE UNA
+═══════════════════════════════════════════════════════════
+Lácteos
+  Leche, yogur, queso, mantequilla, nata, kéfir, postres lácteos.
+  Bebidas vegetales (avena/soja/almendra) → Bebidas, no Lácteos.
 
-Procesamiento OBLIGATORIO (aplica a CUALQUIER supermercado):
-  1. NO crees ningún producto con estos nombres.
-  2. El valor absoluto (sin signo) es el campo "discount" del producto INMEDIATAMENTE ANTERIOR.
-  3. Si hay VARIAS líneas de descuento consecutivas para el mismo producto → SÚMALAS.
-  4. final_unit_price = original_unit_price − discount  (para productos por unidad)
-     Para productos por peso → ver Regla 4.
-  5. Las líneas de resumen al pie del ticket son INFORMATIVAS → ignóralas:
-       "Total oferta Lidl Plus: X EUR"
-       "Desc. total en compra: X EUR"
-       "Ahorro total: X EUR"
-       Cualquier línea de totales de descuento al final del ticket
-  6. Los cupones para futuras compras también son INFORMATIVOS → ignóralos:
-       "Cupones canjeados: -3€ para tu próxima compra"
-       "-15% Nueces sin cáscara"
+Carnes y embutidos
+  Carne fresca/envasada, embutidos (jamón, chorizo, bacon, fuet),
+  precocinados cárnicos (nuggets, delicias de pollo, rebozados).
 
-Ejemplos reales (tickets Lidl):
+Pescados y mariscos
+  Fresco/envasado, marisco, conservas de pescado (atún, sardinas),
+  ahumados, surimi, boquerones en vinagre.
 
-  Ticket muestra:
-    BANANA (0,772 kg x 1,49 EUR/kg)   1,15
-    PROMO LIDL PLUS                   -0,39
-  Resultado:
-    quantity=0.772, unit="kg", original_unit_price=1.49,
-    discount=0.39, final_unit_price=1.10, line_total=0.85
-  [El discount es el importe total descontado en la línea, no sobre el precio/kg]
+Frutas
+  Fruta fresca o en bolsa.
 
-  Ticket muestra:
-    GRIEGO NATURAL   1,49
-    Desc.            -0,10
-  Resultado:
-    quantity=1, unit="unidad", original_unit_price=1.49,
-    discount=0.10, final_unit_price=1.39, line_total=1.39
+Verduras y hortalizas
+  Verdura/hortaliza fresca o envasada, ensaladas en bolsa, ajo fresco.
 
-  Ticket muestra:
-    TRÍO DE HUMMUS   2,49
-    Descuento 20%    -0,50
-  Resultado:
-    quantity=1, unit="unidad", original_unit_price=2.49,
-    discount=0.50, final_unit_price=1.99, line_total=1.99
+Pan
+  Pan fresco o envasado: barra, molde, integral, pita, picos, regañás,
+  base de pizza, tortitas de maíz/arroz.
 
-  Ticket muestra:
-    NUEZ NATURAL     2,69
-    PROMO LIDL PLUS  -0,40
-    PROMO LIDL PLUS  -0,70
-  Resultado:
-    discount=1.10 (suma de ambos), final_unit_price=1.59, line_total=1.59
+Bollería y pastelería
+  Listo para consumir, dulce horneado: croissants, berlinas, donuts,
+  palmeras, napolitanas, magdalenas, bizcochos, hojaldres rellenos
+  (bacon-queso, jamón-queso), galletas saladas/dulces tipo bollería.
 
-  Ticket muestra:
-    HUMMUS           1,15
-    PROMO LIDL PLUS  -0,17
-    PROMO LIDL PLUS  -0,30
-  Resultado:
-    discount=0.47, final_unit_price=0.68, line_total=0.68
+Dulces y chocolate
+  Chocolate, bombones, cacao en polvo (Colacao), caramelos, gominolas,
+  regaliz, chicles, miel, mermelada, crema de cacao/nutella, azúcar,
+  edulcorantes, siropes.
 
-════════════════════════════════════════════════════════════
-REGLA 4 — PRODUCTOS DE PESO VARIABLE
-════════════════════════════════════════════════════════════
-Un producto de peso variable ocupa 1 o 2 líneas:
+Bebidas
+  Agua, refrescos, zumos, cerveza, vino, cava, energéticas, batidos,
+  bebidas vegetales. (Café/infusiones tienen categoría propia.)
 
-  Formato A (Mercadona / Lidl ticket 1):
-    NOMBRE DEL PRODUCTO
-      X,XXX kg  Y,YY €/kg   Z,ZZ        ← segunda línea con peso y precio/kg
+Café e infusiones
+  Café (grano/molido/cápsulas/soluble), té, manzanilla, tila, poleo,
+  achicoria, cebada soluble.
 
-  Formato B (Lidl ticket 2):
-    NOMBRE DEL PRODUCTO   Z,ZZ
-      X,XXX kg x Y,YY  EUR/kg            ← segunda línea debajo
+Droguería
+  Limpieza del hogar: detergente, suavizante, lejía, multiusos,
+  papel de cocina/vegetal, film, aluminio, bolsas de basura, esponjas.
 
-  Formato C (Dia):
-    NOMBRE   X,XXXkg   Y,YY €/kg   Z,ZZ € ← todo en una línea
+Higiene personal
+  Papel higiénico, gel, champú, dentífrico, desodorante, maquinillas,
+  compresas/tampones, pañales, toallitas, crema corporal/facial, solar.
 
-En todos los casos:
-  quantity           = el peso en kg (ej. 0.942)
-  unit               = "kg"
-  original_unit_price = el precio POR KG (ej. 1.90) — NO el importe total
-  line_total         = el importe final de la línea (ej. 1.79)
+Congelados
+  Cualquier producto congelado (manda el estado de conservación):
+  verdura/fruta congelada, pizza, gyozas, croquetas, helados, marisco
+  o carne congelados, patatas prefritas.
 
-Si el producto tiene además un descuento de fidelidad (PROMO LIDL PLUS, etc.):
-  discount           = importe total descontado sobre la línea (ej. 0.30)
-  final_unit_price   = (line_total − discount) / quantity  redondeado a 2 decimales
-    Ejemplo: PIMIENTO ROJO  0,338 kg x 2,89 EUR/kg  0,98 → PROMO -0,30
-      discount=0.30, line_total=0.68, final_unit_price=0.68/0.338 ≈ 2.01
+  Precocinados vendidos en el lineal de congelados (caprichos, delicias,
+  nuggets, croquetas, fingers, rebozados): siempre Congelados, aunque el
+  nombre sugiera Carnes, Lácteos u otra categoría.
 
-Si NO hay descuento:
-  discount           = 0.0
-  final_unit_price   = original_unit_price
+Snacks y aperitivos
+  Patatas fritas, palomitas, gusanitos, nachos, pipas, frutos secos,
+  aceitunas, anchoas (aperitivo), barritas de cereales, crackers salados.
 
-════════════════════════════════════════════════════════════
-REGLA 5 — CANTIDAD Y PRECIO UNITARIO (MÚLTIPLES UNIDADES)
-════════════════════════════════════════════════════════════
-Cuando se compran varias unidades del mismo producto, muchos supermercados
-muestran la cantidad al inicio de la línea seguida del precio unitario y el total:
-  Formato habitual: CANTIDAD  NOMBRE  P.UNIT  IMPORTE_TOTAL
+Huevos
+  Huevos frescos, cualquier formato/pack.
 
-  Ejemplos (Mercadona):
-    "2 ARROZ CAMPESTRE  2,00  4,00"   → quantity=2, original_unit_price=2.00, line_total=4.00
-    "2 Q. UNTAR SUAVE   1,40  2,80"  → quantity=2, original_unit_price=1.40, line_total=2.80
+Cereales y pasta
+  Arroz, pasta seca, cereales de desayuno, copos de avena, fideos de
+  cristal, cuscús, quinoa, bulgur.
 
-  Otros formatos equivalentes que pueden aparecer en cualquier supermercado:
-    "3 x 1,50"      → quantity=3, original_unit_price=1.50, line_total=4.50
-    "NOMBRE  x3  1,50  4,50"  → ídem
+Legumbres
+  Secas o cocidas/en bote: garbanzos, lentejas, alubias, edamame.
 
-En todos los casos: original_unit_price es el precio POR UNIDAD, no el total.
+Aceites y grasas
+  Aceite de oliva/girasol/coco, manteca, ghee, margarina.
+  (Mantequilla → Lácteos.)
 
-════════════════════════════════════════════════════════════
-REGLA 6 — CATEGORÍAS FIJAS
-════════════════════════════════════════════════════════════
-Elige EXACTAMENTE UNA de estas categorías:
-  Lácteos · Carnes · Pescados · Frutas · Verduras · Panadería y pastelería
-  Bebidas · Café e infusiones · Droguería · Higiene · Congelados · Snacks
-  Dulces y repostería · Huevos · Cereales y pasta · Legumbres
-  Aceites y grasas · Salsas y conservas · Platos preparados
-  Especias y condimentos · Parafarmacia · Mascotas · Otros
+Salsas y conservas
+  Salsas (tomate frito, ketchup, mayonesa, mostaza, pesto, soja),
+  conservas vegetales (maíz, pimiento, alcachofa en lata/bote),
+  cremas y patés (hummus, crema de cacahuete, tahin), encurtidos.
+  (Legumbres en bote → Legumbres. Aceite → Aceites y grasas.)
 
-DEFINICIÓN DE CADA CATEGORÍA (úsala para inferir aunque el ticket no lo diga):
+Platos preparados
+  Cocinado y listo para comer/calentar: tortilla de patata, ensaladilla
+  rusa, gazpacho/salmorejo, lasaña/canelones, sushi, bocadillos
+  envasados, ensaladas con proteína. No confundir con Pan/Bollería.
 
-  Lácteos
-    Leche (vaca, cabra...), yogur (cualquier tipo), queso, mantequilla,
-    nata, kéfir, postres lácteos (natillas, flan, arroz con leche).
-    OJO: bebidas vegetales (avena, soja, almendra) → Bebidas, NO Lácteos.
+Especias y condimentos
+  Especias secas, sal, caldos, levadura, bicarbonato, maicena, vinagres.
+  (Salsas líquidas → Salsas y conservas.)
 
-  Carnes
-    Carne fresca o envasada: pollo, cerdo, ternera, cordero, pavo, conejo.
-    Embutidos y charcutería: jamón cocido, jamón serrano, salchichas,
-    chorizo, salchichón, fuet, lomo embuchado, bacon / panceta, mortadela.
-    Precocinados cárnicos: delicias de pollo, nuggets, rebozados cárnicos.
+Parafarmacia
+  Vitaminas, suplementos, proteína en polvo/barritas, colágeno,
+  medicamentos sin receta, tiritas, termómetros, test embarazo.
 
-  Pescados
-    Pescado fresco o envasado, marisco, gambas, mejillones, berberechos,
-    atún en lata, sardinas en lata, caballa en lata, salmón ahumado,
-    palitos de cangrejo / surimi, boquerones en vinagre.
+Mascotas
+  Comida y accesorios para perro/gato, arena, antiparasitarios.
 
-  Frutas
-    Fruta fresca o en bolsa: manzana, naranja, plátano, uva, pera,
-    fresas, melón, sandía, kiwi, mandarina, limón, aguacate, mango,
-    piña, melocotón, ciruela, cereza.
+Otros
+  Bazar, papelería, pilas, bombillas, bolsas reutilizables, lo que no
+  encaje en ninguna categoría anterior.
 
-  Verduras
-    Verdura y hortaliza fresca o envasada: tomate, lechuga, cebolla,
-    patata, zanahoria, pimiento, calabacín, berenjena, brócoli, coliflor,
-    espinacas, ajo (fresco o en cabeza), puerro, espárragos,
-    ensalada en bolsa, mezcla de verduras, canónigos, rúcula.
 
-  Panadería y pastelería
-    Pan fresco o envasado: barra, molde, integral, pita, tortitas de
-    maíz / arroz, pan de molde, regañás, picos.
-    Bollería y pastelería lista para consumir:
-      berlinas / donuts / palmeras / croissants / napolitanas,
-      magdalenas, bizcochos, galletas, rosquillas, sobaos,
-      hojaldres rellenos listos para consumir (bacon-queso, jamón-queso,
-      mini-pizzas, empanadillas de hojaldre),
-      "CACAO CRUNCH" (berlina de cacao de Mercadona),
-      "BACON X% QUESO X%" (hojaldre relleno listo para comer).
 
-  Bebidas
-    Agua (con o sin gas), refrescos (cola, naranja, limón...),
-    zumos y néctares, cerveza, vino, cava, sidra, bebidas energéticas,
-    batidos, bebidas vegetales (avena, soja, almendra, arroz).
-    OJO: café e infusiones tienen su propia categoría.
+═══════════════════════════════════════════════════════════
+7. BRAND
+═══════════════════════════════════════════════════════════
+A) Marca de fabricante visible (Coca-Cola, Danone, Colgate...) → úsala,
+   elimínala del "name".
 
-  Café e infusiones
-    Café (grano, molido, cápsulas, soluble), té (cualquier variedad),
-    manzanilla, tila, poleo, infusiones de hierbas, rooibos,
-    achicoria, cebada soluble.
+B) Envasado/manufacturado sin marca de fabricante:
+   Mercadona: alimentación→"Hacendado" · higiene/cosmética→"Deliplus"
+              · limpieza→"Bosque Verde"
+   Dia:       higiene/cosmética→"Imaqe" · alimentación→"Dia"
+   Lidl:      lácteos→"Milbona" · detergentes→"Pilos" · asiática→"Vitasia"
+              · cosmética→"Cien" · si no se identifica→"Lidl"
+   Aldi:      sub-marca si se reconoce, si no→"Aldi"
+   Carrefour→"Carrefour" · Alcampo→"Auchan" · Eroski→"Eroski"
+   Consum→"Consum" · Caprabo→"Caprabo" · El Corte Inglés→"El Corte Inglés"
+   Simply→"Simply"
+   Supermercado no listado + envasado sin marca visible → usa el nombre
+   del propio supermercado. Si no hay confianza → null.
 
-  Droguería
-    Limpieza del hogar: detergente (ropa, lavavajillas), suavizante,
-    limpiadores multiusos, fregasuelos, quitagrasas, lejía, ambientadores,
-    papel de cocina, papel vegetal, film transparente, papel de aluminio,
-    bolsas de basura, esponjas, estropajos, bayetas, guantes de limpieza.
+C) Fresco a granel (fruta, verdura, carne, pescado) → null, salvo marca
+   explícita ("Jamón Serrano Navidul", "Pollo Coren").
 
-  Higiene
-    Higiene personal: papel higiénico, gel de ducha, champú,
-    acondicionador, dentífrico, cepillo de dientes, hilo dental,
-    desodorante, maquinillas de afeitar, espuma de afeitar,
-    compresas, tampones, pañales, toallitas húmedas, colonia,
-    crema corporal / facial, protector solar.
-
-  Congelados
-    Cualquier producto congelado (el estado de conservación manda):
-    verduras congeladas, fruta congelada, pizza congelada,
-    gyozas / dumplings, fish & chips, croquetas congeladas,
-    helados, polos, frutos rojos congelados, carne congelada,
-    marisco congelado, patatas prefritas congeladas.
-
-  Snacks
-    Aperitivos y picoteo salado: patatas fritas, palomitas, gusanitos,
-    nachos, pipas, frutos secos (nueces, almendras, cacahuetes, pistachos),
-    aceitunas, anchoas en lata (aperitivo), barritas de cereales,
-    crackers / biscotes salados.
-
-  Dulces y repostería
-    Chocolate (tableta, onzas, bombones), cacao en polvo (Colacao, Nesquik),
-    caramelos, gominolas, regaliz, chicles, mermelada, miel,
-    crema de cacao / nocilla / nutella, azúcar (blanca, morena, glass),
-    edulcorantes (sacarina, stevia), siropes y toppings dulces.
-    OJO: bollería y galletas → Panadería y pastelería.
-
-  Huevos
-    Huevos frescos (cualquier formato, tamaño o pack).
-
-  Cereales y pasta
-    Arroz (cualquier variedad), pasta (macarrones, espaguetis, fideos,
-    tallarines, lasaña seca), cereales de desayuno, copos de avena,
-    fideos de cristal, cuscús, quinoa, bulgur.
-
-  Legumbres
-    Legumbres secas o cocidas (en bote / brick):
-    garbanzos, lentejas, alubias / judías, habas, guisantes secos,
-    soja en grano, edamame envasado.
-
-  Aceites y grasas
-    Aceite de oliva (virgen, virgen extra, refinado), aceite de girasol,
-    aceite de coco, manteca de cerdo, ghee, margarina.
-    OJO: mantequilla → Lácteos.
-
-  Salsas y conservas
-    Salsas: tomate frito / triturado, ketchup, mayonesa, mostaza,
-    pesto, salsa de soja, tabasco, salsa brava, alioli envasado.
-    Conservas vegetales: maíz en lata, pimiento en bote, espárragos en lata,
-    alcachofas en conserva, tomate natural en lata.
-    Pastas y cremas: hummus, crema de cacahuete, tahin, paté vegetal.
-    Encurtidos: pepinillos, cebolletas, aceitunas en bote.
-    OJO: legumbres en bote → Legumbres. Aceite → Aceites y grasas.
-
-  Platos preparados
-    Comida cocinada lista para consumir o solo calentar:
-      tortilla de patata (envasada o de charcutería), ensaladilla rusa,
-      gazpacho / salmorejo, lasaña / canelones listos, pasta preparada,
-      arroz preparado, sopa preparada, potaje / cocido preparado,
-      paella preparada, wok preparado, sushi / makis,
-      bocadillos y sándwiches envasados, ensaladas preparadas con proteína.
-    Criterio: si está cocinado y listo para comer (frío o calentando),
-    es "Platos preparados". No confundir con Panadería (bollería/pan).
-
-  Especias y condimentos
-    Especias secas: ajo en polvo, pimentón (dulce/picante), comino,
-    orégano, tomillo, romero, curry, cúrcuma, canela, pimienta, clavo,
-    nuez moscada, cúrcuma, jengibre en polvo, hierbas provenzales.
-    Sal: sal fina, sal gorda, sal marina, flor de sal.
-    Caldos: pastillas de caldo, caldo en brick, preparado para sofrito.
-    Levadura (química o fresca), bicarbonato, maicena.
-    Vinagres: vinagre de vino, vinagre de manzana, vinagre de módena.
-    OJO: salsas líquidas (ketchup, mostaza...) → Salsas y conservas.
-
-  Parafarmacia
-    Vitaminas y suplementos (vitamina C, D, omega-3, multivitamínico),
-    proteínas en polvo / barritas proteicas, colágeno, probióticos,
-    medicamentos sin receta (ibuprofeno, paracetamol, antiácidos),
-    tiritas, termómetros, tensiómetros, test de embarazo / ovulación.
-
-  Mascotas
-    Comida para perro o gato (seca, húmeda, snacks),
-    arena para gatos, accesorios para mascotas,
-    antiparasitarios, champú para mascotas.
-
-  Otros
-    Bolsa de plástico / bolsa reutilizable, artículos de bazar,
-    productos de papelería, pilas, bombillas, artículos de temporada,
-    cualquier producto que no encaje en las categorías anteriores.
-
-════════════════════════════════════════════════════════════
-REGLA 7 — MARCA (BRAND)
-════════════════════════════════════════════════════════════
-Orden de decisión (aplica en este orden estricto):
-
-CASO A — Marca de fabricante visible en el ticket:
-  Si el ticket menciona una marca comercial reconocible (Coca-Cola, Danone,
-  Colgate, Pascual, Nestlé, Kellogg's, Heinz, Fairy, Ariel...) → úsala en
-  "brand" y elimínala del campo "name".
-
-CASO B — Producto ENVASADO/MANUFACTURADO sin marca de fabricante:
-
-  ── CAPA 1: supermercados conocidos ──
-    Mercadona:
-      alimentación general   → "Hacendado"
-      higiene y cosmética    → "Deliplus"
-      limpieza del hogar     → "Bosque Verde"
-    Dia:
-      higiene y cosmética    → "Imaqe"
-      alimentación general   → "Dia"
-    Lidl: usa la sub-marca si la reconoces con seguridad:
-      lácteos                → "Milbona"
-      detergentes            → "Pilos"
-      comida asiática        → "Vitasia"
-      cosmética/higiene      → "Cien"
-      si no la identificas   → "Lidl"
-    Aldi: ídem con sus sub-marcas; si no la identificas → "Aldi"
-    Carrefour                → "Carrefour"
-    Alcampo                  → "Auchan"
-    Eroski                   → "Eroski"
-    Consum                   → "Consum"
-    Caprabo                  → "Caprabo"
-    El Corte Inglés          → "El Corte Inglés"
-    Simply                   → "Simply"
-
-  ── CAPA 2: supermercado no listado ──
-    Si el supermercado no aparece en la tabla anterior pero el producto
-    es claramente envasado/manufacturado y de marca blanca:
-    → usa el nombre comercial del supermercado como brand.
-    Ejemplo: supermercado "Supersol", producto envasado sin marca visible
-    → brand = "Supersol"
-    Si no puedes determinar con confianza si es marca blanca → brand = null.
-
-CASO C — Producto fresco a granel (fruta, verdura, carne, pescado, charcutería suelta):
-  → "brand": null  (salvo que el ticket indique explícitamente una marca,
-    p.ej. "Jamón Serrano Navidul" o "Pollo Coren")
+Códigos de artículo en el nombre (frecuente en Lidl/Aldi bazar) → elimínalos
+del "name". Ej: "ESPUMADOR-0508364" → name="Espumador de leche", brand="Lidl"
 
 En caso de duda razonable → null antes que inventar.
 
-Productos con código de artículo en el nombre (frecuente en Lidl y Aldi bazar):
-  "ESPUMADOR-0508364" → name="Espumador de leche", brand="Lidl"
-  "FLOOPY ZEBRA"      → name="Peluche cebra Floopy", brand="Lidl", category="Otros"
-  Elimina siempre el código numérico del campo "name".
+═══════════════════════════════════════════════════════════
+8. NOMBRES
+═══════════════════════════════════════════════════════════
+"name": normalizado, legible, formato título, sin cantidades ni marca.
+"original_name": exacto tal cual aparece en el ticket.
 
-════════════════════════════════════════════════════════════
-REGLA 8 — NOMBRES DE PRODUCTO
-════════════════════════════════════════════════════════════
-  "name"          : nombre NORMALIZADO, legible, sin cantidades ni marca.
-                    Completa abreviaturas. Usa formato título.
-  "original_name" : nombre EXACTO tal como aparece en el ticket, sin modificar.
+Abreviaturas frecuentes: TOM→Tomate · MANZ→Manzana · Q.→Queso
+HIGIE/HIGIENICO→Higiénico · NAT/NTRAL→Natural · PAT→Patata
+C/CEB→con cebolla · CONGELA→congelado/a · S.AZ→sin azúcar
+UND→unidades (ej. "2 UND"→"(2 uds)" al final del name)
+"24 HUEVOS FRESCOS"→"Huevos frescos (pack 24 uds)"
 
-Expansión de abreviaturas frecuentes en tickets españoles:
-  PLT        → "pellet" o referencia interna → omite del nombre
-  TOM        → Tomate
-  MANZ       → Manzana
-  Q.         → Queso
-  HIGIE/HIGIENICO → Higiénico (papel)
-  DOBLE ROLL → Doble rollo
-  NAT/NTRAL  → Natural
-  PAT        → Patata
-  C/CEB      → con cebolla
-  CONGELA    → congelado/a
-  S.AZ       → sin azúcar
-  UND        → unidades
-  2 UND en el nombre → "(2 uds)" al final del name
-  24 HUEVOS FRESCOS → "Huevos frescos (pack 24 uds)", category="Huevos"
+═══════════════════════════════════════════════════════════
+9. CAMPOS DE PRECIO
+═══════════════════════════════════════════════════════════
+original_unit_price: precio/unidad o /kg antes de descuento (positivo)
+discount: importe descontado en € (positivo, 0.0 si no hay)
+final_unit_price: original_unit_price − discount (unidades)
+                  (line_total − discount) / quantity (peso variable)
+line_total: importe final de la línea
+quantity: nº unidades o peso en kg · unit: "kg"/"unidad"/"litro"/"g"
 
-Si la marca se extrae del nombre y el resto queda ambiguo → completa para que sea descriptivo.
-
-════════════════════════════════════════════════════════════
-REGLA 9 — CAMPOS DE PRECIO (resumen)
-════════════════════════════════════════════════════════════
-  original_unit_price : precio por unidad/kg ANTES de descuentos (siempre positivo)
-  discount            : importe descontado en € — SIEMPRE positivo (0.0 si no hay descuento)
-  final_unit_price    : original_unit_price − discount  (para unidades)
-                        (line_total − discount) / quantity  (para peso variable con descuento)
-  line_total          : importe total de la línea tal como figura en el ticket
-  quantity            : número de unidades o peso en kg
-  unit                : "kg", "unidad", "litro", "g", etc.
-
-════════════════════════════════════════════════════════════
-REGLA 10 — FUENTE (SOURCE)
-════════════════════════════════════════════════════════════
-Si no se especifica, usa "Email".
-
-════════════════════════════════════════════════════════════
-REGLA 11 — NO INVENTAR / VALORES FALTANTES
-════════════════════════════════════════════════════════════
-  - No inventes productos que no aparezcan en el ticket.
-  - No inventes precios, cantidades ni direcciones.
-  - Si falta un dato → null (nunca cadena vacía para campos numéricos).
-  - "time" y "brand" son opcionales → pueden ser null.
-  - Si no puedes determinar la categoría → "Otros".
-
-════════════════════════════════════════════════════════════
-REGLA 12 — SALIDA JSON
-════════════════════════════════════════════════════════════
-  - Devuelve SIEMPRE un JSON válido.
-  - Sin texto adicional, sin explicaciones, sin bloques de código markdown.
-  - Usa punto (.) como separador decimal, nunca coma.
+═══════════════════════════════════════════════════════════
+10. SOURCE / VALORES FALTANTES
+═══════════════════════════════════════════════════════════
+source: "Email" si no se especifica.
+No inventes productos, precios, cantidades ni direcciones.
+Falta un dato → null (nunca cadena vacía en campos numéricos).
+time y brand son opcionales → pueden ser null.
+Si no puedes determinar categoría → "Otros".
 """
+
 
 
 def _call_gemini(file_bytes: bytes, mime_type: str):

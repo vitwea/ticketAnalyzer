@@ -35,12 +35,13 @@ RESET  = "\033[0m"
 BOLD   = "\033[1m"
 
 CATEGORIES = [
-    "Lácteos", "Carnes", "Pescados", "Frutas", "Verduras",
-    "Panadería y pastelería", "Bebidas", "Café e infusiones",
-    "Droguería", "Higiene", "Congelados", "Snacks",
-    "Dulces y repostería", "Huevos", "Cereales y pasta", "Legumbres",
-    "Aceites y grasas", "Salsas y conservas", "Platos preparados",
-    "Especias y condimentos", "Parafarmacia", "Mascotas", "Otros",
+    "Lácteos", "Carnes y embutidos", "Pescados y mariscos", "Frutas",
+    "Verduras y hortalizas", "Pan", "Bollería y pastelería",
+    "Dulces y chocolate", "Bebidas", "Café e infusiones", "Droguería",
+    "Higiene personal", "Congelados", "Snacks y aperitivos", "Huevos",
+    "Cereales y pasta", "Legumbres", "Aceites y grasas",
+    "Salsas y conservas", "Platos preparados", "Especias y condimentos",
+    "Parafarmacia", "Mascotas", "Otros",
 ]
 
 

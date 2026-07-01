@@ -166,7 +166,7 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
 def run_pipeline(query: str = (
     'from:mercadona '
     'OR subject:(lidl ticket) '
-    'OR from:(dia) '
+    'OR from:dia.es '
     'OR subject:(alcampo ticket)'
 )) -> List[int]:
     logger.info(f"Running pipeline with query: {query}")
