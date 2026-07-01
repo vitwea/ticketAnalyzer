@@ -1,17 +1,58 @@
+"""
+src/ocr/unified.py
+
+Gemini 2.5 Flash OCR layer for Spanish supermarket receipts.
+
+Design notes:
+  - The Gemini client is created lazily on first use (H-2), not at import
+    time.  This means importing this module in tests does not require a
+    valid GEMINI_API_KEY to be set.
+  - response_mime_type="application/json" is set in GenerateContentConfig
+    so Gemini constrains its output to valid JSON.  The markdown-stripping
+    in _parse_response is kept as a defensive fallback for SDK versions or
+    model responses that bypass the constraint (H-6).
+  - Retry logic catches json.JSONDecodeError only on attempt 1; attempt 2
+    re-raises broadly so callers receive the original error.
+"""
+
 from __future__ import annotations
 
 import json
+
 from google import genai
 from google.genai import types
+
 from src.config.settings import settings
 from src.config.logger import get_logger
 from src.ocr.examples import build_examples_block
 
 logger = get_logger(__name__)
 
-client = genai.Client(api_key=settings.anthropic_api_key)
+# ── Lazy Gemini client (H-2) ────────────────────────────────────────────────
+# Instantiating genai.Client at module level would raise at import time if
+# GEMINI_API_KEY is missing (e.g. in test environments).  _get_client()
+# defers initialization to the first actual OCR call.
 
-_PROMPT = _PROMPT = """
+_client = None
+
+
+def _get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        if not settings.gemini_api_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. "
+                "Obtain one at https://aistudio.google.com/app/apikey "
+                "and add it to your .env file."
+            )
+        _client = genai.Client(api_key=settings.gemini_api_key)
+    return _client
+
+
+# ── Prompt ──────────────────────────────────────────────────────────────────
+# Single assignment (H-6: was accidentally written as `_PROMPT = _PROMPT = `).
+
+_PROMPT = """
 Eres un sistema experto en lectura de tickets de supermercado españoles.
 Devuelve SIEMPRE un JSON ESTRICTO, sin texto adicional ni bloques markdown.
 
@@ -207,8 +248,6 @@ Otros
   Bazar, papelería, pilas, bombillas, bolsas reutilizables, lo que no
   encaje en ninguna categoría anterior.
 
-
-
 ═══════════════════════════════════════════════════════════
 7. BRAND
 ═══════════════════════════════════════════════════════════
@@ -269,24 +308,36 @@ Si no puedes determinar categoría → "Otros".
 """
 
 
+# ── Internal helpers ─────────────────────────────────────────────────────────
 
 def _call_gemini(file_bytes: bytes, mime_type: str):
     """Single Gemini API call."""
     prompt = _PROMPT + build_examples_block()
-    return client.models.generate_content(
+    return _get_client().models.generate_content(
         model="gemini-2.5-flash",
         contents=[
             types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
             types.Part.from_text(text=prompt),
         ],
         config=types.GenerateContentConfig(
+            # Instructs Gemini to return only valid JSON (H-6).
+            # response_mime_type and the markdown stripping below are
+            # complementary, not redundant:
+            #   - The config constrains the model's sampler to JSON tokens.
+            #   - The stripping handles edge cases where older SDK versions
+            #     or specific model builds still wrap the output in ```json
+            #     fences despite the constraint.
             response_mime_type="application/json",
         ),
     )
 
 
 def _parse_response(response) -> dict:
-    """Strip markdown fences and parse JSON from a Gemini response."""
+    """
+    Parse JSON from a Gemini response.
+    Strips markdown code fences defensively in case response_mime_type
+    did not fully suppress them (see _call_gemini comment above).
+    """
     raw = response.text.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
@@ -296,12 +347,31 @@ def _parse_response(response) -> dict:
     return json.loads(raw)
 
 
+# ── Public API ────────────────────────────────────────────────────────────────
+
 def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
     """
     Extract structured ticket data from a PDF or image using Gemini 2.5 Flash.
     Retries once automatically if Gemini returns malformed JSON.
+
+    Raises ValueError if file_bytes is empty or too large.
+    Raises RuntimeError if GEMINI_API_KEY is not configured.
+    Raises json.JSONDecodeError (wrapped in RuntimeError) after two failures.
     """
-    logger.info(f"Sending {mime_type} ({len(file_bytes)} bytes) to Gemini 2.5 Flash OCR...")
+    _MAX_BYTES = 20 * 1024 * 1024  # 20 MB — Gemini inline upload limit
+
+    if not file_bytes:
+        raise ValueError("file_bytes is empty")
+    if len(file_bytes) > _MAX_BYTES:
+        raise ValueError(
+            f"File too large: {len(file_bytes):,} bytes "
+            f"(Gemini inline limit: {_MAX_BYTES:,} bytes)"
+        )
+
+    logger.info(
+        "Sending %s (%s bytes) to Gemini 2.5 Flash...",
+        mime_type, f"{len(file_bytes):,}",
+    )
 
     response = _call_gemini(file_bytes, mime_type)
 
@@ -310,8 +380,8 @@ def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
         data = _parse_response(response)
         logger.info("Gemini OCR extraction successful.")
         return data
-    except json.JSONDecodeError as e:
-        logger.warning(f"Gemini returned malformed JSON (attempt 1): {e} — retrying...")
+    except json.JSONDecodeError as exc:
+        logger.warning("Gemini returned malformed JSON (attempt 1): %s — retrying...", exc)
 
     # Attempt 2
     try:
@@ -319,7 +389,9 @@ def extract_ticket_data(file_bytes: bytes, mime_type: str) -> dict:
         data = _parse_response(response)
         logger.info("Gemini OCR extraction successful on retry.")
         return data
-    except Exception as e:
-        logger.error(f"Gemini returned malformed JSON after retry: {e}")
-        logger.error(f"Raw response: {response.text.strip()}")
-        raise
+    except json.JSONDecodeError as exc:
+        logger.error("Gemini returned malformed JSON after retry: %s", exc)
+        logger.error("Raw response: %s", response.text.strip())
+        raise RuntimeError(
+            f"Gemini failed to return valid JSON after 2 attempts: {exc}"
+        ) from exc

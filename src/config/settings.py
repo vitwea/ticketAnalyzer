@@ -52,7 +52,7 @@ class Settings:
     gmail_scopes: tuple[str, ...]
 
     # --- AI / LLMs ---
-    anthropic_api_key: str | None
+    gemini_api_key: str | None
 
     # --- Database (PostgreSQL) ---
     db_name: str
@@ -96,7 +96,7 @@ def load_settings() -> Settings:
         gmail_scopes=("https://www.googleapis.com/auth/gmail.readonly",),
 
         # AI
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY"),
+        gemini_api_key=os.getenv("GEMINI_API_KEY"),
 
         # PostgreSQL
         db_name=os.getenv("DB_NAME", ""),
