@@ -45,6 +45,7 @@ from src.db.insert import (
 )
 from src.gmail.reader import get_attachments_bytes, list_messages
 from src.ocr.unified import extract_ticket_data
+from src.config.settings import settings
 from src.config.logger import get_logger
 
 logger = get_logger(__name__)
@@ -278,19 +279,18 @@ def process_ticket_json(ticket_json: dict, gmail_msg_id: str) -> int:
         db.close()
 
 
-def run_pipeline(
-    query: str = (
-        "from:mercadona "
-        "OR subject:(lidl ticket) "
-        "OR from:dia.es "
-        "OR subject:(alcampo ticket)"
-    ),
-) -> List[int]:
+def run_pipeline(query: str | None = None) -> List[int]:
     """
     Fetch Gmail messages matching the query, run OCR on each attachment,
     and persist the extracted data.  Already-processed messages are skipped
     via receipt_exists().
+
+    query: Gmail search string.  Defaults to settings.gmail_search_query
+           (configurable via the GMAIL_SEARCH_QUERY env var), so new
+           supermarkets can be added without touching source code.
     """
+    if query is None:
+        query = settings.gmail_search_query
     logger.info("Running pipeline with query: %s", query)
 
     msgs = list_messages(query)

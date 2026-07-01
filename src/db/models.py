@@ -15,7 +15,7 @@ Index strategy:
     — used by every JOIN that assembles a receipt's lines.
 """
 
-from sqlalchemy import Column, Index, Integer, String, ForeignKey, DateTime, Numeric
+from sqlalchemy import CheckConstraint, Column, Index, Integer, String, ForeignKey, DateTime, Numeric
 from sqlalchemy.orm import relationship
 from src.db.connection import Base
 
@@ -117,7 +117,9 @@ class Source(Base):
     __tablename__ = "source"
 
     id_source = Column(Integer, primary_key=True)
-    name      = Column(String, nullable=False)
+    # unique=True: source names ("Email", "WhatsApp"...) are a fixed vocabulary.
+    # Without this constraint, concurrent inserts could create duplicate rows.
+    name      = Column(String, nullable=False, unique=True)
 
     receipts = relationship("Receipt", back_populates="source")
 
@@ -151,6 +153,12 @@ class ReceiptLine(Base):
     __table_args__ = (
         # Every query that assembles a receipt's lines filters by id_receipt.
         Index("ix_receipt_line_receipt", "id_receipt"),
+        # Guard against OCR returning unexpected unit strings.
+        # Add new values here (+ migration) if new units are needed.
+        CheckConstraint(
+            "unit IN ('unidad', 'kg', 'litro', 'g', 'ml', 'pack')",
+            name="ck_receipt_line_unit",
+        ),
     )
 
     id_line             = Column(Integer, primary_key=True)

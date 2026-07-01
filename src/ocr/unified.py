@@ -45,13 +45,16 @@ def _get_client() -> genai.Client:
                 "Obtain one at https://aistudio.google.com/app/apikey "
                 "and add it to your .env file."
             )
-        _client = genai.Client(api_key=settings.gemini_api_key)
+        _client = genai.Client(
+            api_key=settings.gemini_api_key,
+            # L-8: without a timeout, a network hang blocks the pipeline
+            # indefinitely.  60 s is generous for a single OCR call.
+            http_options=types.HttpOptions(timeout=60_000),  # milliseconds
+        )
     return _client
 
 
 # ── Prompt ──────────────────────────────────────────────────────────────────
-# Single assignment (H-6: was accidentally written as `_PROMPT = _PROMPT = `).
-
 _PROMPT = """
 Eres un sistema experto en lectura de tickets de supermercado españoles.
 Devuelve SIEMPRE un JSON ESTRICTO, sin texto adicional ni bloques markdown.
