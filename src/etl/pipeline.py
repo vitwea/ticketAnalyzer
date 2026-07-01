@@ -38,6 +38,7 @@ from src.db.insert import (
     get_or_create_product,
     get_or_create_product_alias,
     get_or_create_receipt,
+    get_product_id_for_alias,
     get_or_create_source,
     get_or_create_store,
     get_or_create_supermarket,
@@ -191,19 +192,38 @@ def _insert_products(db, id_receipt: int, products: list[dict]) -> None:
     """
     Insert all product lines for a receipt within an existing session.
     Any exception propagates immediately so the outer transaction rolls back.
+
+    M-6: before creating a new Product row, check whether original_name
+    already has an alias.  If it does, reuse the mapped product to avoid
+    duplicate Product rows when OCR normalizes the same ticket line
+    differently across two receipts.
     """
     for i, p in enumerate(products):
         try:
-            id_category = get_or_create_category(db, p["category"])
-
-            brand_name = p.get("brand")
-            id_brand   = get_or_create_brand(db, brand_name) if brand_name else None
-
-            id_product = get_or_create_product(db, p["name"], id_category, id_brand)
-
             original_name = p.get("original_name")
-            if original_name and original_name != p["name"]:
-                get_or_create_product_alias(db, original_name, id_product)
+
+            # M-6: alias lookup — reuse existing product if original_name is known
+            id_product = (
+                get_product_id_for_alias(db, original_name)
+                if original_name
+                else None
+            )
+
+            if id_product is None:
+                # Normal path: create category, brand, product and alias
+                id_category = get_or_create_category(db, p["category"])
+
+                brand_name = p.get("brand")
+                id_brand   = get_or_create_brand(db, brand_name) if brand_name else None
+
+                id_product = get_or_create_product(db, p["name"], id_category, id_brand)
+
+                if original_name and original_name != p["name"]:
+                    get_or_create_product_alias(db, original_name, id_product)
+            else:
+                logger.debug(
+                    "Product %r reused via alias (id=%d)", original_name, id_product
+                )
 
             create_receipt_line(
                 db=db,
@@ -220,7 +240,7 @@ def _insert_products(db, id_receipt: int, products: list[dict]) -> None:
             logger.error(
                 "Error processing product %d (%r): %s", i, p.get("name"), exc
             )
-            raise  # propagate → outer except rolls back the whole transaction
+            raise  # propagate -> outer except rolls back the whole transaction
 
 
 # ──────────────────────────────────────────────────────────────

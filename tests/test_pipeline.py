@@ -348,3 +348,60 @@ def test_pipeline_dia_ticket(monkeypatch, in_memory_db):
     )
 
     assert len(run_pipeline("subject:(dia ticket)")) == 1
+
+
+def test_pipeline_reuses_product_via_alias(monkeypatch, in_memory_db):
+    """
+    M-6: when the same original_name appears in two different tickets,
+    the second ticket must reuse the existing Product row via the alias
+    table rather than creating a duplicate.
+
+    Scenario:
+      Ticket 1 → original_name="LECHE ENTERA" → creates Product(id=1, name="Leche entera")
+                  and alias "LECHE ENTERA" → id=1
+      Ticket 2 → original_name="LECHE ENTERA" → alias found → reuses Product(id=1)
+                  (even though OCR normalized it as "Leche entera 1L" this time)
+    After both runs there must be exactly ONE Product row, not two.
+    """
+    ticket1 = _make_ticket(products=[_make_product(
+        name="Leche entera",
+        original_name="LECHE ENTERA",
+        category="Lácteos",
+    )])
+    ticket2 = _make_ticket(products=[_make_product(
+        name="Leche entera 1L",       # OCR normalized differently
+        original_name="LECHE ENTERA", # same original_name as ticket 1
+        category="Lácteos",
+    )])
+
+    tickets = iter([ticket1, ticket2])
+
+    monkeypatch.setattr(
+        "src.etl.pipeline.list_messages",
+        lambda q: [{"id": "msg_t1"}, {"id": "msg_t2"}],
+    )
+    monkeypatch.setattr(
+        "src.etl.pipeline.get_attachments_bytes",
+        lambda mid: [("t.pdf", "application/pdf", b"x")],
+    )
+    monkeypatch.setattr(
+        "src.etl.pipeline.extract_ticket_data",
+        lambda d, m: next(tickets),
+    )
+
+    run_pipeline("from:mercadona")
+
+    from src.db.models import Product, ReceiptLine
+    import src.db.connection as conn_module
+
+    db = conn_module.SessionLocal()
+    try:
+        assert db.query(Product).count() == 1, \
+            "Expected 1 Product row; alias lookup should have prevented a duplicate"
+        assert db.query(ReceiptLine).count() == 2, \
+            "Both receipts should have a receipt_line pointing to the same product"
+        lines = db.query(ReceiptLine).all()
+        assert lines[0].id_product == lines[1].id_product, \
+            "Both lines must reference the same product id"
+    finally:
+        db.close()

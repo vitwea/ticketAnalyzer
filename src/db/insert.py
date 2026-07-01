@@ -63,6 +63,24 @@ def receipt_exists(gmail_id: str) -> bool:
         db.close()
 
 
+def get_product_id_for_alias(db: Session, original_name: str) -> int | None:
+    """
+    Return the product id already mapped to this original_name, or None.
+
+    Called by _insert_products before creating a new Product row (M-6).
+    If the alias exists the caller reuses the mapped product, preventing
+    duplicate Product rows when OCR normalizes the same receipt line
+    differently across two tickets but produces the same original_name.
+
+    Example:
+      Ticket 1 -> original_name="LECHE ENTERA" -> Product(id=1, name="Leche entera")
+      Ticket 2 -> original_name="LECHE ENTERA" -> alias found -> reuse id=1
+                  (even if OCR would have normalized it as "Leche entera 1L")
+    """
+    obj = db.query(ProductAlias).filter_by(original_name=original_name).first()
+    return obj.id_product if obj else None
+
+
 # ── Session-injection helpers with savepoint protection ───────────────────────
 
 def get_or_create_supermarket(db: Session, name: str) -> int:
