@@ -1,34 +1,38 @@
 """
 src/db/insert.py
 
-All public functions follow the same contract:
+All public functions follow the session-injection contract:
 
     get_or_create_*(db: Session, ...) -> int
 
-They accept an *external* SQLAlchemy session, use db.flush() (not commit),
-and never close the session.  The caller owns the transaction lifecycle:
+They accept an external SQLAlchemy session, use db.flush() (not commit),
+and never close the session.  The caller owns the transaction lifecycle.
 
-    db = connection.SessionLocal()
-    try:
-        id_a = get_or_create_supermarket(db, "Mercadona")
-        id_b = get_or_create_category(db, "Lácteos")
-        ...
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+Race-condition safety (C-4):
+  Functions that insert rows protected by a UNIQUE constraint use a
+  SAVEPOINT (db.begin_nested()) to handle the TOCTOU window between the
+  initial SELECT and the INSERT.  If another process inserts the same row
+  between our SELECT and INSERT, the IntegrityError rolls back only the
+  savepoint — the outer transaction remains intact and we re-query to
+  return the existing row.
 
-The sole exception is receipt_exists(), which is a read-only pre-flight
-check called *before* any transaction is opened and therefore manages its
-own short-lived session.
+  Affected functions (those with unique constraints):
+    get_or_create_supermarket  (Supermarket.name UNIQUE)
+    get_or_create_category     (Category.name UNIQUE)
+    get_or_create_brand        (Brand.name UNIQUE)
+    get_or_create_source       (Source.name UNIQUE)
+    get_or_create_receipt      (Receipt.gmail_id UNIQUE)
+
+  NOT affected (no unique constraint → no IntegrityError risk):
+    get_or_create_store, get_or_create_product,
+    get_or_create_product_alias, create_receipt_line
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.db import connection
@@ -48,9 +52,7 @@ from src.config.logger import get_logger
 logger = get_logger(__name__)
 
 
-# ──────────────────────────────────────────────────────────────
-# Stand-alone helper (own session — read-only)
-# ──────────────────────────────────────────────────────────────
+# ── Stand-alone helper (own session — read-only) ──────────────────────────────
 
 def receipt_exists(gmail_id: str) -> bool:
     """Return True if a receipt with this Gmail message ID already exists."""
@@ -61,20 +63,54 @@ def receipt_exists(gmail_id: str) -> bool:
         db.close()
 
 
-# ──────────────────────────────────────────────────────────────
-# Session-injection helpers  (flush, no commit)
-# ──────────────────────────────────────────────────────────────
+# ── Session-injection helpers with savepoint protection ───────────────────────
 
 def get_or_create_supermarket(db: Session, name: str) -> int:
-    """Get or create a supermarket by name."""
+    """Get or create a supermarket by name (UNIQUE constraint → savepoint)."""
     obj = db.query(Supermarket).filter_by(name=name).first()
     if obj:
         return obj.id_supermarket
-    obj = Supermarket(name=name)
-    db.add(obj)
-    db.flush()
-    logger.debug("New supermarket: %s (id=%d)", name, obj.id_supermarket)
-    return obj.id_supermarket
+    try:
+        with db.begin_nested():
+            obj = Supermarket(name=name)
+            db.add(obj)
+        logger.debug("New supermarket: %s (id=%d)", name, obj.id_supermarket)
+        return obj.id_supermarket
+    except IntegrityError:
+        logger.debug("Supermarket '%s' inserted concurrently — fetching row", name)
+        return db.query(Supermarket).filter_by(name=name).first().id_supermarket
+
+
+def get_or_create_category(db: Session, name: str) -> int:
+    """Get or create a product category (UNIQUE constraint → savepoint)."""
+    obj = db.query(Category).filter_by(name=name).first()
+    if obj:
+        return obj.id_category
+    try:
+        with db.begin_nested():
+            obj = Category(name=name)
+            db.add(obj)
+        logger.debug("New category: %s (id=%d)", name, obj.id_category)
+        return obj.id_category
+    except IntegrityError:
+        logger.debug("Category '%s' inserted concurrently — fetching row", name)
+        return db.query(Category).filter_by(name=name).first().id_category
+
+
+def get_or_create_brand(db: Session, name: str) -> int:
+    """Get or create a brand (UNIQUE constraint → savepoint)."""
+    obj = db.query(Brand).filter_by(name=name).first()
+    if obj:
+        return obj.id_brand
+    try:
+        with db.begin_nested():
+            obj = Brand(name=name)
+            db.add(obj)
+        logger.debug("New brand: %s (id=%d)", name, obj.id_brand)
+        return obj.id_brand
+    except IntegrityError:
+        logger.debug("Brand '%s' inserted concurrently — fetching row", name)
+        return db.query(Brand).filter_by(name=name).first().id_brand
 
 
 def get_or_create_store(
@@ -86,7 +122,8 @@ def get_or_create_store(
     province: str,
     country: str,
 ) -> int:
-    """Get or create a store, keyed on (supermarket, address, postal_code)."""
+    """Get or create a store, keyed on (supermarket, address, postal_code).
+    No unique constraint → no savepoint needed."""
     obj = (
         db.query(Store)
         .filter_by(
@@ -112,28 +149,20 @@ def get_or_create_store(
     return obj.id_store
 
 
-def get_or_create_category(db: Session, name: str) -> int:
-    """Get or create a product category by name."""
-    obj = db.query(Category).filter_by(name=name).first()
+def get_or_create_source(db: Session, name: str) -> int:
+    """Get or create a receipt source (UNIQUE constraint → savepoint)."""
+    obj = db.query(Source).filter_by(name=name).first()
     if obj:
-        return obj.id_category
-    obj = Category(name=name)
-    db.add(obj)
-    db.flush()
-    logger.debug("New category: %s (id=%d)", name, obj.id_category)
-    return obj.id_category
-
-
-def get_or_create_brand(db: Session, name: str) -> int:
-    """Get or create a brand by name."""
-    obj = db.query(Brand).filter_by(name=name).first()
-    if obj:
-        return obj.id_brand
-    obj = Brand(name=name)
-    db.add(obj)
-    db.flush()
-    logger.debug("New brand: %s (id=%d)", name, obj.id_brand)
-    return obj.id_brand
+        return obj.id_source
+    try:
+        with db.begin_nested():
+            obj = Source(name=name)
+            db.add(obj)
+        logger.debug("New source: %s (id=%d)", name, obj.id_source)
+        return obj.id_source
+    except IntegrityError:
+        logger.debug("Source '%s' inserted concurrently — fetching row", name)
+        return db.query(Source).filter_by(name=name).first().id_source
 
 
 def get_or_create_product(
@@ -142,7 +171,8 @@ def get_or_create_product(
     id_category: int,
     id_brand: int | None = None,
 ) -> int:
-    """Get or create a normalized product, keyed on (name, category, brand)."""
+    """Get or create a normalized product, keyed on (name, category, brand).
+    No unique constraint → no savepoint needed."""
     obj = (
         db.query(Product)
         .filter_by(
@@ -170,7 +200,8 @@ def get_or_create_product_alias(
     original_name: str,
     id_product: int,
 ) -> int:
-    """Get or create a product alias, keyed on (original_name, product)."""
+    """Get or create a product alias, keyed on (original_name, product).
+    No unique constraint → no savepoint needed."""
     obj = db.query(ProductAlias).filter_by(
         original_name=original_name,
         id_product=id_product,
@@ -184,18 +215,6 @@ def get_or_create_product_alias(
     return obj.id_alias
 
 
-def get_or_create_source(db: Session, name: str) -> int:
-    """Get or create a receipt source by name."""
-    obj = db.query(Source).filter_by(name=name).first()
-    if obj:
-        return obj.id_source
-    obj = Source(name=name)
-    db.add(obj)
-    db.flush()
-    logger.debug("New source: %s (id=%d)", name, obj.id_source)
-    return obj.id_source
-
-
 def get_or_create_receipt(
     db: Session,
     gmail_id: str,
@@ -204,27 +223,26 @@ def get_or_create_receipt(
     id_store: int,
     id_source: int,
 ) -> int:
-    """
-    Get or create a receipt, keyed on gmail_id (unique constraint).
-    Returns the existing id without error if already present — this covers
-    the unlikely race where receipt_exists() passed but another process
-    committed the same receipt before us.
-    """
+    """Get or create a receipt by gmail_id (UNIQUE constraint → savepoint)."""
     obj = db.query(Receipt).filter_by(gmail_id=gmail_id).first()
     if obj:
         logger.debug("Receipt already exists: %s", gmail_id)
         return obj.id_receipt
-    obj = Receipt(
-        gmail_id=gmail_id,
-        datetime=datetime_val,
-        total_amount=total_amount,
-        id_store=id_store,
-        id_source=id_source,
-    )
-    db.add(obj)
-    db.flush()
-    logger.debug("New receipt: %s (id=%d)", gmail_id, obj.id_receipt)
-    return obj.id_receipt
+    try:
+        with db.begin_nested():
+            obj = Receipt(
+                gmail_id=gmail_id,
+                purchased_at=datetime_val,
+                total_amount=total_amount,
+                id_store=id_store,
+                id_source=id_source,
+            )
+            db.add(obj)
+        logger.debug("New receipt: %s (id=%d)", gmail_id, obj.id_receipt)
+        return obj.id_receipt
+    except IntegrityError:
+        logger.debug("Receipt '%s' inserted concurrently — fetching row", gmail_id)
+        return db.query(Receipt).filter_by(gmail_id=gmail_id).first().id_receipt
 
 
 def create_receipt_line(
@@ -238,16 +256,8 @@ def create_receipt_line(
     final_unit_price: Decimal,
     line_total: Decimal,
 ) -> None:
-    """
-    Insert a receipt line item.
-
-    No idempotency check here: the caller is responsible for ensuring the
-    enclosing transaction is atomic (i.e. either all lines are inserted or
-    the whole transaction is rolled back).  Duplicate lines from a retry of
-    the same gmail_id are prevented by the receipt_exists() guard in
-    run_pipeline(), which skips already-processed messages before any
-    transaction is opened.
-    """
+    """Insert a receipt line item.
+    No idempotency check — caller owns the atomic transaction."""
     obj = ReceiptLine(
         id_receipt=id_receipt,
         id_product=id_product,
