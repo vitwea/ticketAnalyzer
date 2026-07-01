@@ -19,22 +19,32 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+
+# Direct runtime dependencies only. Transitive deps (requests, cryptography,
+# httplib2, protobuf...) are resolved automatically by pip and must NOT be
+# pinned here — pin them in a generated lockfile if you need reproducibility.
 dependencies = [
-    "python-dotenv==1.0.0",
-    "google-auth==2.28.0",
-    "google-auth-oauthlib==1.2.0",
-    "google-api-python-client==1.12.5",
-    "google-genai==2.10.0",
-    "sqlalchemy==2.0.23",
-    "psycopg2-binary==2.9.9",
+    "python-dotenv>=1.0.0",
+    "google-auth>=2.28.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-api-python-client>=2.0.0",
+    # Requires the unified "Google Gen AI SDK" that exposes `google.genai`
+    # and `google.genai.types.GenerateContentConfig`. The old `generation_config`
+    # API is incompatible with src/ocr/unified.py.
+    "google-genai>=1.0.0",
+    "SQLAlchemy>=2.0.23",
+    "psycopg2-binary>=2.9.9",
+    # Schema migrations. Needed at deploy time (`alembic upgrade head`),
+    # so it belongs in runtime deps, not dev.
+    "alembic>=1.13.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest==7.4.3",
-    "pytest-cov==4.1.0",
-    "black==23.12.0",
-    "ruff==0.1.8",
+    "pytest>=7.4.3",
+    "pytest-cov>=4.1.0",
+    "black>=23.12.0",
+    "ruff>=0.1.8",
 ]
 
 [tool.pytest.ini_options]
