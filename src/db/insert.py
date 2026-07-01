@@ -3,7 +3,7 @@ from datetime import date
 from src.db import connection
 from src.db.models import (
     Supermarket, Category, Product, Receipt, ReceiptLine, Store, Brand,
-    ProductAlias, Source, PriceHistory
+    ProductAlias, Source
 )
 from src.config.logger import get_logger
 
