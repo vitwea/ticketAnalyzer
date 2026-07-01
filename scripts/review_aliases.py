@@ -2,8 +2,14 @@
 scripts/review_aliases.py
 
 Interactive CLI to review product aliases learned automatically from
-processed tickets. Lets you approve them (they become trusted examples)
-or correct them (fixes the DB and adds the correction to examples.json).
+processed tickets.
+
+Commands during review:
+  y = approve (add to examples.json as-is)
+  e = edit    (correct name / category / brand, then save)
+  d = discard (skip without adding to examples)
+  s = skip    (leave for the next session)
+  q = quit
 
 Usage:
     python -m scripts.review_aliases
@@ -19,14 +25,13 @@ from datetime import datetime
 from pathlib import Path
 
 from src.db.connection import SessionLocal
-from src.db.models import ProductAlias, Product, Category, Brand
+from src.db.models import ProductAlias, Product, Category, Brand, ReceiptLine, Receipt
 from src.config.logger import get_logger
 
 logger = get_logger(__name__)
 
 EXAMPLES_PATH = Path("src/ocr/examples.json")
 
-# ANSI colors
 GREEN  = "\033[92m"
 YELLOW = "\033[93m"
 RED    = "\033[91m"
@@ -49,11 +54,21 @@ CATEGORIES = [
 # DB helpers
 # ─────────────────────────────────────────────
 
-def fetch_aliases() -> list[dict]:
-    """Return all aliases with their current product/category/brand."""
+def fetch_aliases(since: datetime | None = None) -> list[dict]:
+    """
+    Return all aliases with their current product / category / brand.
+
+    If `since` is provided, only aliases whose product appears in at least
+    one receipt dated on or after `since` are returned.  This lets the
+    reviewer focus on aliases from recently processed tickets.
+
+    Implementation: a correlated subquery finds the set of product IDs
+    that appear in ReceiptLine rows linked to receipts with
+    purchased_at >= since, then filters the alias list to that set.
+    """
     db = SessionLocal()
     try:
-        rows = (
+        q = (
             db.query(
                 ProductAlias.id_alias,
                 ProductAlias.original_name,
@@ -62,12 +77,21 @@ def fetch_aliases() -> list[dict]:
                 Category.name.label("category"),
                 Brand.name.label("brand"),
             )
-            .join(Product, ProductAlias.id_product == Product.id_product)
-            .join(Category, Product.id_category == Category.id_category)
-            .outerjoin(Brand, Product.id_brand == Brand.id_brand)
-            .order_by(ProductAlias.id_alias.asc())
-            .all()
+            .join(Product,    ProductAlias.id_product == Product.id_product)
+            .join(Category,   Product.id_category     == Category.id_category)
+            .outerjoin(Brand, Product.id_brand         == Brand.id_brand)
         )
+
+        if since:
+            recent_ids = (
+                db.query(ReceiptLine.id_product)
+                .join(Receipt, ReceiptLine.id_receipt == Receipt.id_receipt)
+                .filter(Receipt.purchased_at >= since)
+                .subquery()
+            )
+            q = q.filter(Product.id_product.in_(recent_ids))
+
+        rows = q.order_by(ProductAlias.id_alias.asc()).all()
         return [
             {
                 "id_alias":      r.id_alias,
@@ -84,8 +108,6 @@ def fetch_aliases() -> list[dict]:
 
 
 def count_product_usages(id_product: int) -> int:
-    """Return how many aliases and receipt_lines share this product row."""
-    from src.db.models import ReceiptLine
     db = SessionLocal()
     try:
         alias_count = db.query(ProductAlias).filter_by(id_product=id_product).count()
@@ -97,26 +119,17 @@ def count_product_usages(id_product: int) -> int:
 
 def update_alias_in_db(alias: dict, new_name: str, new_category: str,
                        new_brand: str | None) -> None:
-    """
-    Safely update a product alias correction.
-
-    If the product row is shared (used by other aliases or receipt_lines),
-    creates a NEW product row instead of mutating the existing one, so
-    other aliases/lines are not affected.
-    """
     db = SessionLocal()
     try:
         usages = count_product_usages(alias["id_product"])
-        shared = usages > 1  # more than just this alias
+        shared = usages > 1
 
-        # Resolve or create category
         category = db.query(Category).filter_by(name=new_category).first()
         if not category:
             category = Category(name=new_category)
             db.add(category)
             db.flush()
 
-        # Resolve or create brand
         id_brand = None
         if new_brand:
             brand = db.query(Brand).filter_by(name=new_brand).first()
@@ -127,7 +140,6 @@ def update_alias_in_db(alias: dict, new_name: str, new_category: str,
             id_brand = brand.id_brand
 
         if shared:
-            # Create a new product row — don't touch the shared one
             new_product = Product(
                 normalized_name=new_name,
                 id_category=category.id_category,
@@ -135,20 +147,12 @@ def update_alias_in_db(alias: dict, new_name: str, new_category: str,
             )
             db.add(new_product)
             db.flush()
-
-            # Re-point only THIS alias to the new product
-            alias_row = db.query(ProductAlias).filter_by(
-                id_alias=alias["id_alias"]
-            ).first()
+            alias_row = db.query(ProductAlias).filter_by(id_alias=alias["id_alias"]).first()
             alias_row.id_product = new_product.id_product
-
             print(f"{YELLOW}  Product was shared ({usages} usages) → "
                   f"created new product row (id={new_product.id_product}).{RESET}")
         else:
-            # Safe to update the existing product in place
-            product = db.query(Product).filter_by(
-                id_product=alias["id_product"]
-            ).first()
+            product = db.query(Product).filter_by(id_product=alias["id_product"]).first()
             product.normalized_name = new_name
             product.id_category     = category.id_category
             product.id_brand        = id_brand
@@ -177,10 +181,14 @@ def load_examples() -> dict:
 def save_examples(data: dict) -> None:
     with open(EXAMPLES_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        from src.ocr.examples import invalidate_examples_cache
+        invalidate_examples_cache()
+    except Exception:
+        pass
 
 
 def add_to_examples(entry: dict, data: dict) -> None:
-    """Add or update an entry in examples.json keyed by original_name."""
     examples = data.setdefault("examples", [])
     existing = next(
         (e for e in examples
@@ -235,7 +243,7 @@ def _print_summary(approved: int, corrected: int,
 # ─────────────────────────────────────────────
 
 def review(since: datetime | None = None) -> None:
-    aliases  = fetch_aliases()
+    aliases  = fetch_aliases(since=since)
     examples = load_examples()
 
     pending = [
@@ -244,11 +252,13 @@ def review(since: datetime | None = None) -> None:
     ]
 
     if not pending:
-        print(f"{GREEN}Nothing to review — all aliases are in examples.json.{RESET}")
+        since_msg = f" after {since.date()}" if since else ""
+        print(f"{GREEN}Nothing to review — all aliases{since_msg} are in examples.json.{RESET}")
         return
 
+    since_label = f" (since {since.date()})" if since else ""
     print(f"\n{BOLD}{CYAN}═══════════════════════════════════════════{RESET}")
-    print(f"{BOLD}{CYAN}  ticketAnalyzer — alias review{RESET}")
+    print(f"{BOLD}{CYAN}  ticketAnalyzer — alias review{since_label}{RESET}")
     print(f"{BOLD}{CYAN}═══════════════════════════════════════════{RESET}")
     print(f"  {len(pending)} aliases to review\n")
     print(f"  {GREEN}y{RESET}=approve  {YELLOW}e{RESET}=edit  "
@@ -258,8 +268,7 @@ def review(since: datetime | None = None) -> None:
 
     for i, alias in enumerate(pending, 1):
         brand_str = alias["brand"] or "null"
-        print(f"{BOLD}[{i}/{len(pending)}]{RESET}  "
-              f"{CYAN}{alias['original_name']}{RESET}")
+        print(f"{BOLD}[{i}/{len(pending)}]{RESET}  {CYAN}{alias['original_name']}{RESET}")
         print(f"  name     : {alias['name']}")
         print(f"  category : {alias['category']}")
         print(f"  brand    : {brand_str}")
@@ -268,40 +277,25 @@ def review(since: datetime | None = None) -> None:
             cmd = input("  → ").strip().lower()
 
             if cmd == "y":
-                add_to_examples({
-                    "original_name": alias["original_name"],
-                    "name":          alias["name"],
-                    "category":      alias["category"],
-                    "brand":         alias["brand"],
-                }, examples)
+                add_to_examples({"original_name": alias["original_name"],
+                                  "name": alias["name"], "category": alias["category"],
+                                  "brand": alias["brand"]}, examples)
                 save_examples(examples)
                 approved += 1
                 break
 
             elif cmd == "e":
                 print(f"\n  {YELLOW}Editing — press Enter to keep current value.{RESET}")
-
-                new_name = (
-                    input(f"  name [{alias['name']}]: ").strip()
-                    or alias["name"]
-                )
+                new_name     = input(f"  name [{alias['name']}]: ").strip() or alias["name"]
                 new_category = pick_category(alias["category"])
-                new_brand_raw = input(
-                    f"  brand [{brand_str}] (or 'null'): "
-                ).strip()
-                new_brand = (
-                    None if new_brand_raw.lower() in ("null", "")
-                    else new_brand_raw or alias["brand"]
-                )
+                new_brand_raw = input(f"  brand [{brand_str}] (or 'null'): ").strip()
+                new_brand = (None if new_brand_raw.lower() in ("null", "")
+                             else new_brand_raw or alias["brand"])
 
                 update_alias_in_db(alias, new_name, new_category, new_brand)
-                add_to_examples({
-                    "original_name": alias["original_name"],
-                    "name":          new_name,
-                    "category":      new_category,
-                    "brand":         new_brand,
-                    "note":          "manually corrected",
-                }, examples)
+                add_to_examples({"original_name": alias["original_name"], "name": new_name,
+                                  "category": new_category, "brand": new_brand,
+                                  "note": "manually corrected"}, examples)
                 save_examples(examples)
                 corrected += 1
                 break
@@ -340,7 +334,11 @@ def main() -> None:
     parser.add_argument(
         "--since",
         type=lambda s: datetime.strptime(s, "%Y-%m-%d"),
-        help="Only show aliases from tickets after this date (YYYY-MM-DD)",
+        metavar="YYYY-MM-DD",
+        help=(
+            "Only show aliases from tickets processed on or after this date. "
+            "Useful to focus on aliases from a recent batch of receipts."
+        ),
         default=None,
     )
     args = parser.parse_args()
